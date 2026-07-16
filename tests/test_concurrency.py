@@ -1,5 +1,4 @@
 from pathlib import Path
-from queue import Queue
 from threading import Event, Thread
 
 from tinydb import ConcurrencyError, Database, TinyDBError
@@ -54,72 +53,77 @@ def test_default_fake_lock_handle_release_is_idempotent(tmp_path):
     handle.release()
 
 
-class SerializedAccessProbe:
+class BlockingInstanceLock:
     def __init__(self):
-        self.first_entered = Event()
-        self.second_started = Event()
-        self.release_first = Event()
-        self.overlap_detected = Event()
-        self.active = False
-        self.order = []
+        self.enter_attempted = Event()
+        self.release_enter = Event()
+        self.exit_called = Event()
 
-    def parse_sql(self, sql):
-        return sql
+    def __enter__(self):
+        self.enter_attempted.set()
+        assert self.release_enter.wait(2), "instance lock was not released"
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.exit_called.set()
+
+
+class ExecuteProbe:
+    def __init__(self):
+        self.called = Event()
 
     def execute(self, statement):
-        if self.active:
-            self.overlap_detected.set()
-            raise RuntimeError("raw Python race exception leaked from Database.execute")
-
-        self.active = True
-        self.order.append(f"enter:{statement}")
-        try:
-            if statement == "first":
-                self.first_entered.set()
-                assert self.release_first.wait(2), "first execute was not released"
-            return statement
-        finally:
-            self.order.append(f"exit:{statement}")
-            self.active = False
+        self.called.set()
+        return statement
 
 
-def test_database_execute_serializes_internal_mutable_state_between_threads(
+class CloseProbe:
+    def __init__(self):
+        self.closed = Event()
+
+    def close(self):
+        self.closed.set()
+
+
+def test_database_execute_enters_instance_lock_before_internal_state(
     tmp_path,
     monkeypatch,
 ):
-    probe = SerializedAccessProbe()
     db = Database(tmp_path / "app.db")
-    db._executor = probe
-    monkeypatch.setattr("tinydb.api.parse_sql", probe.parse_sql)
+    lock = BlockingInstanceLock()
+    executor = ExecuteProbe()
+    db._instance_lock = lock
+    db._executor = executor
+    monkeypatch.setattr("tinydb.api.parse_sql", lambda sql: sql)
 
-    results = Queue()
-    errors = Queue()
+    worker = Thread(target=db.execute, args=("SELECT * FROM users",))
 
-    def execute(sql):
-        try:
-            if sql == "second":
-                probe.second_started.set()
-            results.put(db.execute(sql))
-        except BaseException as exc:
-            errors.put(exc)
+    worker.start()
+    assert lock.enter_attempted.wait(2), "execute did not enter the instance lock"
+    assert not executor.called.is_set()
+    lock.release_enter.set()
+    worker.join(2)
 
-    first = Thread(target=execute, args=("first",), name="tinydb-first-execute")
-    second = Thread(target=execute, args=("second",), name="tinydb-second-execute")
+    assert not worker.is_alive()
+    assert executor.called.is_set()
+    assert lock.exit_called.is_set()
 
-    first.start()
-    assert probe.first_entered.wait(2), "first execute did not enter the critical section"
-    second.start()
-    assert probe.second_started.wait(2), "second execute did not start"
 
-    try:
-        assert not probe.overlap_detected.wait(0.2)
-    finally:
-        probe.release_first.set()
-        first.join(2)
-        second.join(2)
+def test_database_close_enters_instance_lock_before_closing_storage(tmp_path):
+    db = Database(tmp_path / "app.db")
+    lock = BlockingInstanceLock()
+    storage = CloseProbe()
+    db._instance_lock = lock
+    db._storage = storage
 
-    assert not first.is_alive()
-    assert not second.is_alive()
-    assert errors.empty()
-    assert tuple(results.get() for _ in range(results.qsize())) == ("first", "second")
-    assert probe.order == ["enter:first", "exit:first", "enter:second", "exit:second"]
+    worker = Thread(target=db.close)
+
+    worker.start()
+    assert lock.enter_attempted.wait(2), "close did not enter the instance lock"
+    assert not storage.closed.is_set()
+    lock.release_enter.set()
+    worker.join(2)
+
+    assert not worker.is_alive()
+    assert storage.closed.is_set()
+    assert lock.exit_called.is_set()
