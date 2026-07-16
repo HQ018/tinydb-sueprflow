@@ -10,6 +10,12 @@ class Identifier:
 
 
 @dataclass(frozen=True)
+class ColumnRef:
+    qualifier: str | None
+    column_name: str
+
+
+@dataclass(frozen=True)
 class Literal:
     value: object
 
@@ -27,7 +33,19 @@ class FunctionCall:
     arguments: tuple[Expression, ...]
 
 
-Expression: TypeAlias = Identifier | Literal | BinaryExpression | FunctionCall
+Expression: TypeAlias = Identifier | ColumnRef | Literal | BinaryExpression | FunctionCall
+
+
+@dataclass(frozen=True)
+class JoinSource:
+    table_name: str
+    alias: str | None = None
+
+
+@dataclass(frozen=True)
+class JoinPredicate:
+    left: ColumnRef
+    right: ColumnRef
 
 
 @dataclass(frozen=True)

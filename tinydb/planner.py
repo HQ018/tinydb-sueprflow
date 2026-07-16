@@ -5,7 +5,16 @@ from typing import TypeAlias
 
 from tinydb.catalog import Catalog, TableSchema
 from tinydb.index import IndexLookup
-from tinydb.sql.ast import BinaryExpression, Expression, Identifier, Literal, Select
+from tinydb.sql.ast import (
+    BinaryExpression,
+    ColumnRef,
+    Expression,
+    Identifier,
+    JoinPredicate,
+    JoinSource,
+    Literal,
+    Select,
+)
 
 
 @dataclass(frozen=True)
@@ -23,7 +32,14 @@ class IndexScanPlan:
     predicate: Expression | None = None
 
 
-QueryPlan: TypeAlias = TableScanPlan | IndexScanPlan
+@dataclass(frozen=True)
+class JoinPlan:
+    sources: tuple[JoinSource, ...]
+    predicates: tuple[JoinPredicate, ...]
+    output_columns: tuple[ColumnRef, ...]
+
+
+QueryPlan: TypeAlias = TableScanPlan | IndexScanPlan | JoinPlan
 
 
 class Planner:
