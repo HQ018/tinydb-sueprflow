@@ -5,3 +5,4 @@
 - Task 3: complete (commits e06ce2e..973552f, review clean).
 - Task 4: complete (commits 5f86b60..f06821d, review clean).
 - Task 5: complete (commits 73eef1a..af32cb8, review clean).
+- Task 6: complete (commits 6d3c964..4edc3dc, review clean).
