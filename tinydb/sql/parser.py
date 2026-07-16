@@ -7,6 +7,7 @@ from tinydb.sql.ast import (
     BinaryExpression,
     ColumnDef,
     CommitTransaction,
+    ColumnRef,
     CreateTable,
     Delete,
     DropTable,
@@ -14,6 +15,8 @@ from tinydb.sql.ast import (
     FunctionCall,
     Identifier,
     Insert,
+    JoinPredicate,
+    JoinSource,
     Literal,
     Ordering,
     RollbackTransaction,
@@ -27,6 +30,7 @@ from tinydb.sql.lexer import Token, tokenize
 COMPARISON_OPERATORS = {"=", "!=", "<", "<=", ">", ">="}
 SUPPORTED_TYPES = {"INT", "FLOAT", "TEXT", "BOOL"}
 AGGREGATES = {"COUNT", "SUM", "AVG"}
+UNSUPPORTED_JOIN_KEYWORDS = {"LEFT", "RIGHT", "FULL", "CROSS", "NATURAL"}
 
 
 def parse_sql(sql: str) -> Statement:
@@ -153,6 +157,11 @@ class _Parser:
         projections = self.parse_projection_list()
         self.expect_keyword("FROM")
         table = self.expect_identifier()
+        table_alias = self.parse_optional_table_alias()
+        join_sources, join_predicates = self.parse_join_clauses()
+
+        if table_alias is not None and not join_sources:
+            raise self.error("table aliases are only supported with INNER JOIN")
 
         where: Expression | None = None
         group_by: tuple[Identifier, ...] = ()
@@ -160,8 +169,6 @@ class _Parser:
         limit: int | None = None
         offset: int | None = None
 
-        if self.match_keyword("JOIN"):
-            raise self.error("JOIN is not supported")
         if self.match_keyword("WHERE"):
             self.advance()
             where = self.parse_predicate_expression()
@@ -188,7 +195,55 @@ class _Parser:
             order_by=order_by,
             limit=limit,
             offset=offset,
+            table_alias=table_alias,
+            join_sources=join_sources,
+            join_predicates=join_predicates,
         )
+
+    def parse_join_clauses(
+        self,
+    ) -> tuple[tuple[JoinSource, ...], tuple[JoinPredicate, ...]]:
+        join_sources: list[JoinSource] = []
+        join_predicates: list[JoinPredicate] = []
+
+        while True:
+            if (
+                self.current.kind == "KEYWORD"
+                and self.current.value in UNSUPPORTED_JOIN_KEYWORDS
+            ):
+                raise self.error(f"{self.current.value} JOIN is not supported")
+            if self.match_keyword("JOIN"):
+                raise self.error("JOIN is not supported")
+            if not self.match_keyword("INNER"):
+                break
+
+            self.advance()
+            self.expect_keyword("JOIN")
+            join_sources.append(self.parse_join_source())
+            self.expect_keyword("ON")
+            join_predicates.append(self.parse_join_predicate())
+
+        return tuple(join_sources), tuple(join_predicates)
+
+    def parse_join_source(self) -> JoinSource:
+        return JoinSource(
+            table_name=self.expect_identifier(),
+            alias=self.parse_optional_table_alias(),
+        )
+
+    def parse_optional_table_alias(self) -> str | None:
+        if self.match_keyword("AS"):
+            self.advance()
+            return self.expect_identifier()
+        if self.match_kind("IDENTIFIER"):
+            return self.expect_identifier()
+        return None
+
+    def parse_join_predicate(self) -> JoinPredicate:
+        left = self.parse_column_ref()
+        self.expect_operator("=")
+        right = self.parse_column_ref()
+        return JoinPredicate(left=left, right=right)
 
     def parse_projection_list(self) -> tuple[Expression, ...]:
         projections = [self.parse_select_expression()]
@@ -293,9 +348,7 @@ class _Parser:
         if self.current.kind == "KEYWORD" and self.current.value in AGGREGATES:
             return self.parse_function_call()
         if self.match_kind("IDENTIFIER"):
-            value = str(self.current.value)
-            self.advance()
-            return Identifier(value)
+            return self.parse_identifier_expression()
         if self.match_kind("NUMBER") or self.match_kind("STRING") or self.match_kind(
             "BOOLEAN"
         ):
@@ -311,6 +364,19 @@ class _Parser:
             self.expect_kind("RPAREN")
             return expression
         raise self.error("expected expression")
+
+    def parse_identifier_expression(self) -> Identifier | ColumnRef:
+        name = self.expect_identifier()
+        if self.match_kind("DOT"):
+            self.advance()
+            return ColumnRef(qualifier=name, column_name=self.expect_identifier())
+        return Identifier(name)
+
+    def parse_column_ref(self) -> ColumnRef:
+        expression = self.parse_identifier_expression()
+        if not isinstance(expression, ColumnRef):
+            raise self.error("expected qualified column reference")
+        return expression
 
     def parse_function_call(self) -> FunctionCall:
         name = str(self.current.value)

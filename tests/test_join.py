@@ -2,8 +2,9 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
+from tinydb.errors import ParseError
 from tinydb.planner import JoinPlan
-from tinydb.sql import ColumnRef, JoinPredicate, JoinSource
+from tinydb.sql import ColumnRef, JoinPredicate, JoinSource, parse_sql
 
 
 def test_join_ast_structures_are_immutable_and_readable():
@@ -45,3 +46,77 @@ def test_join_plan_structure_records_sources_predicates_and_output_columns():
     assert plan.predicates == (predicate,)
     assert plan.output_columns == output_columns
     assert "JoinPlan" in repr(plan)
+
+
+def test_parse_two_table_inner_join_on_equality_predicate():
+    statement = parse_sql(
+        "SELECT users.name, orders.total "
+        "FROM users INNER JOIN orders ON users.id = orders.user_id"
+    )
+
+    assert statement.table == "users"
+    assert statement.table_alias is None
+    assert statement.projections == (
+        ColumnRef(qualifier="users", column_name="name"),
+        ColumnRef(qualifier="orders", column_name="total"),
+    )
+    assert statement.join_sources == (JoinSource(table_name="orders"),)
+    assert statement.join_predicates == (
+        JoinPredicate(
+            left=ColumnRef(qualifier="users", column_name="id"),
+            right=ColumnRef(qualifier="orders", column_name="user_id"),
+        ),
+    )
+
+
+def test_parse_chained_inner_joins():
+    statement = parse_sql(
+        "SELECT users.name, products.name "
+        "FROM users "
+        "INNER JOIN orders ON users.id = orders.user_id "
+        "INNER JOIN products ON orders.product_id = products.id"
+    )
+
+    assert statement.join_sources == (
+        JoinSource(table_name="orders"),
+        JoinSource(table_name="products"),
+    )
+    assert statement.join_predicates == (
+        JoinPredicate(
+            left=ColumnRef(qualifier="users", column_name="id"),
+            right=ColumnRef(qualifier="orders", column_name="user_id"),
+        ),
+        JoinPredicate(
+            left=ColumnRef(qualifier="orders", column_name="product_id"),
+            right=ColumnRef(qualifier="products", column_name="id"),
+        ),
+    )
+
+
+def test_parse_inner_join_aliases_with_and_without_as():
+    statement = parse_sql(
+        "SELECT u.name, o.total "
+        "FROM users AS u INNER JOIN orders o ON u.id = o.user_id"
+    )
+
+    assert statement.table == "users"
+    assert statement.table_alias == "u"
+    assert statement.projections == (
+        ColumnRef(qualifier="u", column_name="name"),
+        ColumnRef(qualifier="o", column_name="total"),
+    )
+    assert statement.join_sources == (JoinSource(table_name="orders", alias="o"),)
+    assert statement.join_predicates == (
+        JoinPredicate(
+            left=ColumnRef(qualifier="u", column_name="id"),
+            right=ColumnRef(qualifier="o", column_name="user_id"),
+        ),
+    )
+
+
+def test_parse_rejects_unsupported_left_join():
+    with pytest.raises(ParseError, match="LEFT JOIN is not supported"):
+        parse_sql(
+            "SELECT users.name, orders.total "
+            "FROM users LEFT JOIN orders ON users.id = orders.user_id"
+        )

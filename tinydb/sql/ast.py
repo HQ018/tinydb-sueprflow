@@ -96,6 +96,9 @@ class Select:
     order_by: tuple[Ordering, ...] = ()
     limit: int | None = None
     offset: int | None = None
+    table_alias: str | None = None
+    join_sources: tuple[JoinSource, ...] = ()
+    join_predicates: tuple[JoinPredicate, ...] = ()
 
 
 @dataclass(frozen=True)
