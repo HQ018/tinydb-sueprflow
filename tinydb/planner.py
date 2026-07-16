@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import TypeAlias
 
 from tinydb.catalog import Catalog, TableSchema
+from tinydb.errors import ConstraintError
 from tinydb.index import IndexLookup
 from tinydb.sql.ast import (
     BinaryExpression,
@@ -47,6 +48,9 @@ class Planner:
         self.catalog = catalog
 
     def plan(self, statement: Select) -> QueryPlan:
+        if statement.join_sources:
+            return self._plan_join(statement)
+
         schema = self.catalog.get_table(statement.table)
         index_candidate = _find_index_candidate(schema, statement.where)
         if index_candidate is None:
@@ -61,9 +65,86 @@ class Planner:
             predicate=statement.where,
         )
 
+    def _plan_join(self, statement: Select) -> JoinPlan:
+        sources = (JoinSource(statement.table, statement.table_alias), *statement.join_sources)
+        source_schemas = _source_schemas(self.catalog, sources)
+        predicates = tuple(
+            JoinPredicate(
+                left=_resolve_column(predicate.left, source_schemas),
+                right=_resolve_column(predicate.right, source_schemas),
+            )
+            for predicate in statement.join_predicates
+        )
+        return JoinPlan(
+            sources=sources,
+            predicates=predicates,
+            output_columns=_resolve_output_columns(statement.projections, source_schemas),
+        )
+
 
 def constraint_index_name(table_name: str, column_name: str) -> str:
     return f"{table_name}_{column_name}"
+
+
+def _source_schemas(
+    catalog: Catalog,
+    sources: tuple[JoinSource, ...],
+) -> dict[str, TableSchema]:
+    source_schemas: dict[str, TableSchema] = {}
+    for source in sources:
+        qualifier = source.alias or source.table_name
+        if qualifier in source_schemas:
+            raise ConstraintError(f"duplicate table alias: {qualifier}")
+        source_schemas[qualifier] = catalog.get_table(source.table_name)
+    return source_schemas
+
+
+def _resolve_output_columns(
+    projections: tuple[Expression, ...],
+    source_schemas: dict[str, TableSchema],
+) -> tuple[ColumnRef, ...]:
+    output_columns: list[ColumnRef] = []
+    for projection in projections:
+        if isinstance(projection, Identifier) and projection.name == "*":
+            output_columns.extend(
+                ColumnRef(qualifier, column.name)
+                for qualifier, schema in source_schemas.items()
+                for column in schema.columns
+            )
+            continue
+        if isinstance(projection, Identifier):
+            output_columns.append(_resolve_column(ColumnRef(None, projection.name), source_schemas))
+            continue
+        if isinstance(projection, ColumnRef):
+            output_columns.append(_resolve_column(projection, source_schemas))
+            continue
+        raise ConstraintError("joined projections must reference columns")
+    return tuple(output_columns)
+
+
+def _resolve_column(
+    column: ColumnRef,
+    source_schemas: dict[str, TableSchema],
+) -> ColumnRef:
+    if column.qualifier is not None:
+        try:
+            schema = source_schemas[column.qualifier]
+        except KeyError as exc:
+            raise ConstraintError(f"unknown table or alias: {column.qualifier}") from exc
+        if not any(schema_column.name == column.column_name for schema_column in schema.columns):
+            raise ConstraintError(f"unknown column: {column.qualifier}.{column.column_name}")
+        return column
+
+    matches = [
+        qualifier
+        for qualifier, schema in source_schemas.items()
+        if any(schema_column.name == column.column_name for schema_column in schema.columns)
+    ]
+    if not matches:
+        raise ConstraintError(f"unknown column: {column.column_name}")
+    if len(matches) > 1:
+        raise ConstraintError(f"ambiguous column: {column.column_name}")
+    return ColumnRef(matches[0], column.column_name)
 
 
 def _find_index_candidate(

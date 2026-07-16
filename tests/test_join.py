@@ -2,9 +2,10 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from tinydb.errors import ParseError
-from tinydb.planner import JoinPlan
-from tinydb.sql import ColumnRef, JoinPredicate, JoinSource, parse_sql
+from tinydb.catalog import Catalog
+from tinydb.errors import ConstraintError, ParseError
+from tinydb.planner import JoinPlan, Planner
+from tinydb.sql import ColumnRef, Identifier, JoinPredicate, JoinSource, Select, parse_sql
 
 
 def test_join_ast_structures_are_immutable_and_readable():
@@ -134,3 +135,76 @@ def test_parse_rejects_unsupported_left_join():
             "SELECT users.name, orders.total "
             "FROM users LEFT JOIN orders ON users.id = orders.user_id"
         )
+
+
+def test_planner_resolves_aliases_and_expands_star_in_source_order():
+    catalog = join_catalog()
+    statement = Select(
+        projections=(Identifier("*"),),
+        table="users",
+        table_alias="u",
+        join_sources=(JoinSource(table_name="orders", alias="o"),),
+        join_predicates=(
+            JoinPredicate(
+                left=ColumnRef(qualifier="u", column_name="id"),
+                right=ColumnRef(qualifier="o", column_name="user_id"),
+            ),
+        ),
+    )
+
+    plan = Planner(catalog).plan(statement)
+
+    assert plan == JoinPlan(
+        sources=(
+            JoinSource(table_name="users", alias="u"),
+            JoinSource(table_name="orders", alias="o"),
+        ),
+        predicates=statement.join_predicates,
+        output_columns=(
+            ColumnRef(qualifier="u", column_name="id"),
+            ColumnRef(qualifier="u", column_name="name"),
+            ColumnRef(qualifier="o", column_name="id"),
+            ColumnRef(qualifier="o", column_name="user_id"),
+            ColumnRef(qualifier="o", column_name="total"),
+        ),
+    )
+
+
+def test_planner_rejects_ambiguous_unqualified_join_column():
+    statement = joined_select((Identifier("id"),))
+
+    with pytest.raises(ConstraintError, match="ambiguous column: id"):
+        Planner(join_catalog()).plan(statement)
+
+
+def test_planner_rejects_unknown_qualified_join_column():
+    statement = joined_select((ColumnRef(qualifier="o", column_name="missing"),))
+
+    with pytest.raises(ConstraintError, match="unknown column: o.missing"):
+        Planner(join_catalog()).plan(statement)
+
+
+def join_catalog() -> Catalog:
+    catalog = Catalog()
+    catalog.apply_create_table(
+        parse_sql("CREATE TABLE users (id INT PRIMARY KEY, name TEXT)")
+    )
+    catalog.apply_create_table(
+        parse_sql("CREATE TABLE orders (id INT PRIMARY KEY, user_id INT, total FLOAT)")
+    )
+    return catalog
+
+
+def joined_select(projections):
+    return Select(
+        projections=projections,
+        table="users",
+        table_alias="u",
+        join_sources=(JoinSource(table_name="orders", alias="o"),),
+        join_predicates=(
+            JoinPredicate(
+                left=ColumnRef(qualifier="u", column_name="id"),
+                right=ColumnRef(qualifier="o", column_name="user_id"),
+            ),
+        ),
+    )
