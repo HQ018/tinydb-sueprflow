@@ -114,6 +114,20 @@ def test_parse_inner_join_aliases_with_and_without_as():
     )
 
 
+def test_parse_join_allows_qualified_order_by_expression():
+    statement = parse_sql(
+        "SELECT u.name, o.total "
+        "FROM users AS u INNER JOIN orders o ON u.id = o.user_id "
+        "ORDER BY u.name DESC"
+    )
+
+    assert statement.order_by[0].expression == ColumnRef(
+        qualifier="u",
+        column_name="name",
+    )
+    assert statement.order_by[0].descending is True
+
+
 def test_parse_rejects_unsupported_left_join():
     with pytest.raises(ParseError, match="LEFT JOIN is not supported"):
         parse_sql(

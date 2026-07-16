@@ -302,14 +302,14 @@ class _Parser:
         return tuple(orderings)
 
     def parse_ordering(self) -> Ordering:
-        identifier = Identifier(self.expect_identifier())
+        expression = self.parse_identifier_expression()
         descending = False
         if self.match_keyword("ASC"):
             self.advance()
         elif self.match_keyword("DESC"):
             self.advance()
             descending = True
-        return Ordering(identifier, descending=descending)
+        return Ordering(expression, descending=descending)
 
     def parse_predicate_expression(self) -> Expression:
         return self.parse_or_predicate()

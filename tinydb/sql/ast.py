@@ -59,7 +59,7 @@ class ColumnDef:
 
 @dataclass(frozen=True)
 class Ordering:
-    expression: Identifier
+    expression: Identifier | ColumnRef
     descending: bool = False
 
 
