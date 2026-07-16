@@ -221,6 +221,51 @@ def test_executor_orders_and_pages_joined_rows(tmp_path):
     assert result.rows == (("Ada", 25.0),)
 
 
+def test_executor_binds_unique_unqualified_where_and_order_by_columns(tmp_path):
+    db = seeded_join_database(tmp_path)
+
+    result = db.execute(
+        "SELECT u.name, o.total "
+        "FROM users AS u INNER JOIN orders AS o ON u.id = o.user_id "
+        "WHERE name = 'Ada' ORDER BY total DESC"
+    )
+
+    assert result.rows == (("Ada", 25.0), ("Ada", 15.0))
+
+
+@pytest.mark.parametrize(
+    ("clause", "message"),
+    (
+        ("WHERE id = 1", "ambiguous column: id"),
+        ("ORDER BY id", "ambiguous column: id"),
+    ),
+)
+def test_executor_rejects_ambiguous_unqualified_join_expressions(tmp_path, clause, message):
+    db = seeded_join_database(tmp_path)
+
+    with pytest.raises(ConstraintError, match=message):
+        db.execute(
+            "SELECT u.name, o.total "
+            "FROM users AS u INNER JOIN orders AS o ON u.id = o.user_id "
+            f"{clause}"
+        )
+
+
+def test_executor_executes_three_table_join_through_public_sql(tmp_path):
+    db = seeded_three_table_join_database(tmp_path)
+
+    result = db.execute(
+        "SELECT u.name, p.name "
+        "FROM users AS u "
+        "INNER JOIN orders AS o ON u.id = o.user_id "
+        "INNER JOIN products AS p ON o.product_id = p.id "
+        "WHERE p.name = 'Keyboard' ORDER BY u.name"
+    )
+
+    assert result.columns == ("u.name", "p.name")
+    assert result.rows == (("Ada", "Keyboard"), ("Lin", "Keyboard"))
+
+
 def join_catalog() -> Catalog:
     catalog = Catalog()
     catalog.apply_create_table(
@@ -259,5 +304,22 @@ def seeded_join_database(tmp_path) -> Database:
     db.execute("INSERT INTO orders (id, user_id, total) VALUES (11, 1, 25.0)")
     db.execute("INSERT INTO orders (id, user_id, total) VALUES (12, 3, 35.0)")
     db.execute("INSERT INTO orders (id, user_id, total) VALUES (13, 99, 100.0)")
+    db.execute("COMMIT")
+    return db
+
+
+def seeded_three_table_join_database(tmp_path) -> Database:
+    db = Database(tmp_path / "three-table-join.db")
+    db.execute("CREATE TABLE users (id INT PRIMARY KEY, name TEXT)")
+    db.execute("CREATE TABLE orders (id INT PRIMARY KEY, user_id INT, product_id INT)")
+    db.execute("CREATE TABLE products (id INT PRIMARY KEY, name TEXT)")
+    db.execute("BEGIN")
+    db.execute("INSERT INTO users (id, name) VALUES (1, 'Ada')")
+    db.execute("INSERT INTO users (id, name) VALUES (2, 'Lin')")
+    db.execute("INSERT INTO orders (id, user_id, product_id) VALUES (10, 1, 100)")
+    db.execute("INSERT INTO orders (id, user_id, product_id) VALUES (11, 2, 100)")
+    db.execute("INSERT INTO orders (id, user_id, product_id) VALUES (12, 2, 101)")
+    db.execute("INSERT INTO products (id, name) VALUES (100, 'Keyboard')")
+    db.execute("INSERT INTO products (id, name) VALUES (101, 'Mouse')")
     db.execute("COMMIT")
     return db

@@ -150,9 +150,11 @@ class Executor:
         return Result(columns=columns, rows=result_rows)
 
     def _execute_join_select(self, catalog: Catalog, statement: Select) -> Result:
-        plan = Planner(catalog).plan(statement)
+        planner = Planner(catalog)
+        plan = planner.plan(statement)
         if not isinstance(plan, JoinPlan):
             raise ExecutionError(f"expected join plan, got: {plan!r}")
+        statement = planner.bind_join_expressions(statement)
 
         rows = tuple(
             row for row in self._join_rows(catalog, plan) if evaluate_predicate(statement.where, row)

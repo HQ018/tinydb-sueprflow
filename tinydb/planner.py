@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TypeAlias
 
 from tinydb.catalog import Catalog, TableSchema
@@ -81,6 +81,18 @@ class Planner:
             output_columns=_resolve_output_columns(statement.projections, source_schemas),
         )
 
+    def bind_join_expressions(self, statement: Select) -> Select:
+        sources = (JoinSource(statement.table, statement.table_alias), *statement.join_sources)
+        source_schemas = _source_schemas(self.catalog, sources)
+        return replace(
+            statement,
+            where=_resolve_expression(statement.where, source_schemas),
+            order_by=tuple(
+                replace(ordering, expression=_resolve_expression(ordering.expression, source_schemas))
+                for ordering in statement.order_by
+            ),
+        )
+
 
 def constraint_index_name(table_name: str, column_name: str) -> str:
     return f"{table_name}_{column_name}"
@@ -120,6 +132,25 @@ def _resolve_output_columns(
             continue
         raise ConstraintError("joined projections must reference columns")
     return tuple(output_columns)
+
+
+def _resolve_expression(
+    expression: Expression | None,
+    source_schemas: dict[str, TableSchema],
+) -> Expression | None:
+    if expression is None:
+        return None
+    if isinstance(expression, Identifier):
+        return _resolve_column(ColumnRef(None, expression.name), source_schemas)
+    if isinstance(expression, ColumnRef):
+        return _resolve_column(expression, source_schemas)
+    if isinstance(expression, BinaryExpression):
+        return BinaryExpression(
+            _resolve_expression(expression.left, source_schemas),
+            expression.operator,
+            _resolve_expression(expression.right, source_schemas),
+        )
+    return expression
 
 
 def _resolve_column(
