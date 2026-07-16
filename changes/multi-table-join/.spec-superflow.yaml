@@ -11,7 +11,7 @@ contract_hash: sha256:8671142dfb154a1a3855c860cf00cc889d635a779e4fc1066bd60573e9
 
 # === Execution progress ===
 execution_mode: SDD
-batches_completed: 4
+batches_completed: 5
 test_result: null
 spec_merged: false
 
