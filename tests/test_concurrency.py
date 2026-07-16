@@ -6,7 +6,7 @@ from threading import Event, Lock, Thread
 
 import pytest
 
-from tinydb import ConcurrencyError, Database, TinyDBError
+from tinydb import ConcurrencyError, ConstraintError, Database, TinyDBError
 from tinydb.locking import LockHandle, LockManager, PlatformLockAdapter
 
 
@@ -115,6 +115,52 @@ finally:
 
     handle = LockManager(database_path, timeout=0.05).acquire_exclusive()
     handle.release()
+
+
+def test_database_open_during_cross_process_transaction_raises_concurrency_error(tmp_path):
+    database_path = tmp_path / "active-transaction.db"
+    child_code = """
+from pathlib import Path
+import sys
+from tinydb import Database
+
+db = Database(Path(sys.argv[1]), lock_timeout=1)
+try:
+    db.execute("CREATE TABLE users (id INT PRIMARY KEY, name TEXT NOT NULL)")
+    db.execute("BEGIN")
+    db.execute("INSERT INTO users (id, name) VALUES (1, 'Ada')")
+    print("transaction-open", flush=True)
+    sys.stdin.readline()
+finally:
+    try:
+        db.execute("ROLLBACK")
+    except Exception:
+        pass
+    db.close()
+"""
+    child = subprocess.Popen(
+        [sys.executable, "-c", child_code, str(database_path)],
+        cwd=Path(__file__).parent.parent,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    try:
+        assert child.stdout.readline().strip() == "transaction-open"
+
+        with pytest.raises(ConcurrencyError):
+            Database(database_path, lock_timeout=0.05)
+    finally:
+        _, stderr = child.communicate("rollback\n", timeout=5)
+
+    assert child.returncode == 0, stderr
+    reopened = Database(database_path, lock_timeout=0.05)
+    try:
+        assert reopened.execute("SELECT id, name FROM users").rows == ()
+    finally:
+        reopened.close()
 
 
 def test_platform_lock_uses_posix_flock_and_releases_it(tmp_path, monkeypatch):
@@ -351,4 +397,21 @@ def test_closing_active_transaction_releases_its_write_lock(tmp_path):
     try:
         assert second.execute("INSERT INTO users (id, name) VALUES (1, 'Ada')").rows_affected == 1
     finally:
+        second.close()
+
+
+def test_failed_implicit_write_releases_its_write_lock(tmp_path):
+    path = tmp_path / "failed-write-release.db"
+    first = Database(path, lock_timeout=0)
+    first.execute("CREATE TABLE users (id INT PRIMARY KEY, name TEXT NOT NULL)")
+    first.execute("INSERT INTO users (id, name) VALUES (1, 'Ada')")
+    second = Database(path, lock_timeout=0)
+
+    try:
+        with pytest.raises(ConstraintError):
+            first.execute("INSERT INTO users (id, name) VALUES (1, 'Duplicate')")
+
+        assert second.execute("INSERT INTO users (id, name) VALUES (2, 'Grace')").rows_affected == 1
+    finally:
+        first.close()
         second.close()

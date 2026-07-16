@@ -5,7 +5,7 @@ import struct
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, Protocol
 
 from tinydb.catalog import Catalog
 from tinydb.errors import StorageError, TransactionError
@@ -19,6 +19,11 @@ _TRANSACTION_STATE_KEY = "transaction"
 _TRANSACTION_MARKER_VERSION = 1
 _SNAPSHOT_CHUNK_SIZE = PAGE_SIZE - 4
 _ACTIVE_WRITERS: set[Path] = set()
+
+
+class RecoveryLockManager(Protocol):
+    def acquire_exclusive(self) -> object:
+        """Acquire the exclusive lock needed before crash recovery."""
 
 
 class RecoveryStatus(Enum):
@@ -54,7 +59,11 @@ def _has_active_same_process_writer(path: str | Path) -> bool:
 
 
 class StorageManager:
-    def __init__(self, path: str | Path):
+    def __init__(
+        self,
+        path: str | Path,
+        recovery_lock_manager: RecoveryLockManager | None = None,
+    ):
         self.path = Path(path)
         self._closed = False
         self.recovery_state = RecoveryState(RecoveryStatus.CLEAN)
@@ -73,7 +82,7 @@ class StorageManager:
         try:
             self._state = self._read_header()
             self._reject_live_same_process_transaction_open()
-            self._recover_incomplete_transaction()
+            self._recover_incomplete_transaction(recovery_lock_manager)
         except Exception:
             self._file.close()
             self._closed = True
@@ -240,10 +249,20 @@ class StorageManager:
     def _persist_state(self) -> None:
         self._write_header(self._state)
 
-    def _recover_incomplete_transaction(self) -> None:
+    def _recover_incomplete_transaction(
+        self,
+        recovery_lock_manager: RecoveryLockManager | None = None,
+    ) -> None:
         marker = self._state.get(_TRANSACTION_STATE_KEY)
         if not marker:
             return
+
+        if recovery_lock_manager is not None:
+            with recovery_lock_manager.acquire_exclusive():
+                self._state = self._read_header()
+                self._recover_incomplete_transaction()
+            return
+
         if not isinstance(marker, dict) or marker.get("status") != "pending":
             raise StorageError("database transaction metadata is invalid")
 

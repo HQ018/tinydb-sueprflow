@@ -3,6 +3,7 @@ from threading import RLock
 
 from tinydb.errors import DatabaseError, ExecutionError
 from tinydb.executor import Executor
+from tinydb.locking import LockManager
 from tinydb.sql import parse_sql
 from tinydb.storage import StorageManager
 from tinydb.transaction import TransactionManager
@@ -13,7 +14,8 @@ class Database:
         self._instance_lock = RLock()
         self.path = Path(path)
         self._closed = False
-        self._storage = StorageManager(self.path)
+        lock_manager = LockManager(self.path.resolve(), timeout=lock_timeout)
+        self._storage = StorageManager(self.path, recovery_lock_manager=lock_manager)
         self._transactions = TransactionManager(self._storage, lock_timeout=lock_timeout)
         self._executor = Executor(self._storage, self._transactions)
 

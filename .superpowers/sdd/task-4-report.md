@@ -17,6 +17,10 @@ Completed Batch 4 transaction write-lock integration in the isolated
 - `StorageManager.lock_path` exposes a stable resolved database identity.
 - `Database(..., lock_timeout=...)` forwards timeout configuration to the
   transaction manager.
+- Post-review fix: `Database` now opens `StorageManager` with a recovery lock
+  manager so pending transaction recovery first coordinates with the same
+  platform write lock. A competing process that still holds the transaction
+  lock now gets `ConcurrencyError` instead of accidentally triggering recovery.
 
 No MVCC, deadlock detection, snapshot reads, high-throughput scheduling, SQL
 semantic expansion, or `changes/tinydb` changes were added.
@@ -39,6 +43,14 @@ semantic expansion, or `changes/tinydb` changes were added.
 - `python -m compileall tinydb tests` -> passed.
 - `python -m pytest` -> 133 passed.
 - `git diff --check` -> passed with no output.
+- Post-review RED: cross-process `Database(path)` during another process's
+  active transaction did not raise `ConcurrencyError`.
+- Post-review focused rerun:
+  `python -m pytest tests/test_concurrency.py::test_database_open_during_cross_process_transaction_raises_concurrency_error tests/test_concurrency.py::test_failed_implicit_write_releases_its_write_lock -q`
+  -> 2 passed.
+- Post-review suite rerun: `python -m pytest tests/test_concurrency.py
+  tests/test_transactions.py` -> 25 passed.
+- Post-review full rerun: `python -m pytest` -> 135 passed.
 
 ## Platform Coverage And Boundary
 
