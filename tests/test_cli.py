@@ -209,7 +209,7 @@ def test_cli_repl_expected_error_keeps_session_alive(tmp_path):
     assert "id\tname\n1\tAda\n" in completed.stdout
 
 
-def test_cli_repl_explain_command_reports_plan_without_executing_sql(tmp_path):
+def test_cli_repl_explain_command_reports_plan(tmp_path):
     database = tmp_path / "explain-repl.db"
 
     completed = run_cli(
@@ -224,6 +224,24 @@ def test_cli_repl_explain_command_reports_plan_without_executing_sql(tmp_path):
 
     assert completed.returncode == 0, completed.stderr
     assert "SCAN users\n" in completed.stdout
-    assert "inserted" not in completed.stdout
+    assert readback.returncode == 0, readback.stderr
+    assert readback.stdout == "id\tname\n"
+
+
+def test_cli_repl_explain_rejects_mutating_sql_without_executing_it(tmp_path):
+    database = tmp_path / "explain-mutation-repl.db"
+
+    completed = run_cli(
+        str(database),
+        input_text=(
+            "CREATE TABLE users (id INT PRIMARY KEY, name TEXT);\n"
+            ".explain INSERT INTO users (id, name) VALUES (1, 'Ada')\n"
+            ".quit\n"
+        ),
+    )
+    readback = run_cli(str(database), "--execute", "SELECT * FROM users")
+
+    assert completed.returncode == 0, completed.stderr
+    assert "error: .explain only supports SELECT statements\n" in completed.stdout
     assert readback.returncode == 0, readback.stderr
     assert readback.stdout == "id\tname\n"
