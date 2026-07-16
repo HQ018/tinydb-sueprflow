@@ -1,5 +1,6 @@
 from pathlib import Path
-from threading import Event, Thread
+from queue import Queue
+from threading import Event, Lock, Thread
 
 from tinydb import ConcurrencyError, Database, TinyDBError
 from tinydb.locking import LockHandle, LockManager
@@ -68,6 +69,30 @@ class BlockingInstanceLock:
         self.exit_called.set()
 
 
+class ObservableInstanceLock:
+    def __init__(self):
+        self._lock = Lock()
+        self._state_lock = Lock()
+        self._held = False
+        self.contended_enter_attempted = Event()
+
+    def __enter__(self):
+        with self._state_lock:
+            if self._held:
+                self.contended_enter_attempted.set()
+
+        self._lock.acquire()
+
+        with self._state_lock:
+            self._held = True
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        with self._state_lock:
+            self._held = False
+        self._lock.release()
+
+
 class ExecuteProbe:
     def __init__(self):
         self.called = Event()
@@ -77,12 +102,91 @@ class ExecuteProbe:
         return statement
 
 
+class TwoThreadExecuteProbe:
+    def __init__(self):
+        self.first_entered = Event()
+        self.second_entered = Event()
+        self.release_first = Event()
+        self.overlap_detected = Event()
+        self._state_lock = Lock()
+        self._active = False
+        self.order = []
+
+    def execute(self, statement):
+        with self._state_lock:
+            if self._active:
+                self.overlap_detected.set()
+                raise RuntimeError("raw Python race exception leaked from Database.execute")
+            self._active = True
+            self.order.append(f"enter:{statement}")
+
+        try:
+            if statement == "first":
+                self.first_entered.set()
+                assert self.release_first.wait(2), "first execute was not released"
+            else:
+                self.second_entered.set()
+            return statement
+        finally:
+            with self._state_lock:
+                self.order.append(f"exit:{statement}")
+                self._active = False
+
+
 class CloseProbe:
     def __init__(self):
         self.closed = Event()
 
     def close(self):
         self.closed.set()
+
+
+def test_database_execute_serializes_internal_mutable_state_between_threads(
+    tmp_path,
+    monkeypatch,
+):
+    db = Database(tmp_path / "app.db")
+    instance_lock = ObservableInstanceLock()
+    executor = TwoThreadExecuteProbe()
+    db._instance_lock = instance_lock
+    db._executor = executor
+    monkeypatch.setattr("tinydb.api.parse_sql", lambda sql: sql)
+
+    results = Queue()
+    errors = Queue()
+    second_started = Event()
+
+    def execute(sql):
+        try:
+            if sql == "second":
+                second_started.set()
+            results.put(db.execute(sql))
+        except BaseException as exc:
+            errors.put(exc)
+
+    first = Thread(target=execute, args=("first",), name="tinydb-first-execute")
+    second = Thread(target=execute, args=("second",), name="tinydb-second-execute")
+
+    first.start()
+    assert executor.first_entered.wait(2), "first execute did not enter executor"
+    second.start()
+    assert second_started.wait(2), "second execute did not start"
+    assert instance_lock.contended_enter_attempted.wait(2), (
+        "second execute did not contend for the instance lock"
+    )
+    assert executor.order == ["enter:first"]
+    assert not executor.second_entered.is_set()
+    assert not executor.overlap_detected.is_set()
+
+    executor.release_first.set()
+    first.join(2)
+    second.join(2)
+
+    assert not first.is_alive()
+    assert not second.is_alive()
+    assert errors.empty()
+    assert sorted(results.get() for _ in range(results.qsize())) == ["first", "second"]
+    assert executor.order == ["enter:first", "exit:first", "enter:second", "exit:second"]
 
 
 def test_database_execute_enters_instance_lock_before_internal_state(

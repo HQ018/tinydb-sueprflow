@@ -9,7 +9,8 @@
 
 ## Changes
 
-- Added a thread-focused test in `tests/test_concurrency.py` using two threads, events, and a probe executor to observe `Database.execute` critical-section overlap without sleep-based scheduling assumptions.
+- Added a thread-focused test in `tests/test_concurrency.py` using two threads, events, an observable instance lock, and a probe executor to observe `Database.execute` serialization without sleep-based scheduling assumptions.
+- Added deterministic lock-before-internal-state coverage for both `Database.execute` and `Database.close`.
 - Tightened the existing lock-handle test name and assertion so it directly verifies `LockHandle` callback idempotency.
 - Added a reentrant instance lock in `tinydb/api.py`.
 - Wrapped `Database.execute` and `Database.close` with the instance lock.
@@ -32,6 +33,8 @@
 
 - `python -m pytest tests/test_concurrency.py tests/test_api.py` passed.
 - `python -m pytest tests/test_transactions.py` passed.
+- Post-review focused rerun: `python -m pytest tests/test_concurrency.py tests/test_api.py tests/test_transactions.py` passed with 20 tests.
+- Post-review full rerun: `python -m pytest` passed with 124 tests.
 - `git diff --check` passed with no output.
 
 ## Concerns
