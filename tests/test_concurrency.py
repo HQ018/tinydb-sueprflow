@@ -1,9 +1,13 @@
 from pathlib import Path
 from queue import Queue
+import subprocess
+import sys
 from threading import Event, Lock, Thread
 
+import pytest
+
 from tinydb import ConcurrencyError, Database, TinyDBError
-from tinydb.locking import LockHandle, LockManager
+from tinydb.locking import LockHandle, LockManager, PlatformLockAdapter
 
 
 class RecordingAdapter:
@@ -52,6 +56,79 @@ def test_default_fake_lock_handle_release_is_idempotent(tmp_path):
     handle = manager.acquire_exclusive()
     handle.release()
     handle.release()
+
+
+def test_lock_handle_releases_when_its_context_exits(tmp_path):
+    adapter = RecordingAdapter()
+    manager = LockManager(tmp_path / "app.db", adapter=adapter)
+
+    with manager.acquire_exclusive():
+        assert adapter.release_calls == 0
+
+    assert adapter.release_calls == 1
+
+
+def test_platform_lock_times_out_against_subprocess_and_releases_after_exit(tmp_path):
+    database_path = tmp_path / "app.db"
+    database_path.write_text("committed data", encoding="utf-8")
+    child_code = """
+from pathlib import Path
+import sys
+from tinydb.locking import LockManager
+
+handle = LockManager(Path(sys.argv[1]), timeout=1).acquire_exclusive()
+try:
+    print("locked", flush=True)
+    sys.stdin.readline()
+finally:
+    handle.release()
+"""
+    child = subprocess.Popen(
+        [sys.executable, "-c", child_code, str(database_path)],
+        cwd=Path(__file__).parent.parent,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    try:
+        assert child.stdout.readline().strip() == "locked"
+
+        with pytest.raises(ConcurrencyError):
+            LockManager(database_path, timeout=0.05).acquire_exclusive()
+
+        assert database_path.read_text(encoding="utf-8") == "committed data"
+    finally:
+        child.communicate("release\n", timeout=5)
+
+    handle = LockManager(database_path, timeout=0.05).acquire_exclusive()
+    handle.release()
+
+
+def test_platform_lock_uses_posix_flock_and_releases_it(tmp_path, monkeypatch):
+    class FakeFcntl:
+        LOCK_EX = 1
+        LOCK_NB = 2
+        LOCK_UN = 4
+
+        def __init__(self):
+            self.operations = []
+
+        def flock(self, descriptor, operation):
+            self.operations.append(operation)
+
+    fake_fcntl = FakeFcntl()
+    monkeypatch.setitem(sys.modules, "fcntl", fake_fcntl)
+    adapter = PlatformLockAdapter(platform="posix")
+
+    handle = adapter.acquire_exclusive(tmp_path / "app.db", timeout=0)
+    handle.release()
+
+    assert fake_fcntl.operations == [
+        fake_fcntl.LOCK_EX | fake_fcntl.LOCK_NB,
+        fake_fcntl.LOCK_UN,
+    ]
 
 
 class BlockingInstanceLock:
