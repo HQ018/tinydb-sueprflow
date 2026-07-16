@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tinydb-sql"
+version = "0.1.0"
+description = "A teaching-oriented embedded relational database built in Python."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+    { name = "TinyDB Contributors" },
+]
+dependencies = []
+
+[project.scripts]
+tinydb = "tinydb.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

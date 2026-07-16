@@ -1,0 +1,42 @@
+# .spec-superflow.yaml — lightweight state machine
+# Derived data. Always rebuildable from artifacts. Lost/corrupt → fall back to content-level detection.
+
+# === Core state ===
+state: closing
+workflow: full
+
+# === Hashes (fast staleness detection) ===
+artifacts_hash: sha256:e9218bab7ae2ec95f0f354df6f3a9c03a7ae526f4a24ac945e544f29e7cde853
+contract_hash: sha256:3bcb105eb3ad13195e72753afc4eabe52e29073d3a14ff1436d27b1fd8ea7a8b
+
+# === Execution progress ===
+execution_mode: SDD
+batches_completed: 9
+test_result: pass
+spec_merged: true
+
+# === Metadata ===
+change_name: tinydb
+last_transition: 2026-07-15T12:10:57.934Z
+last_transition_from: executing
+last_transition_to: closing
+
+# === Decision points ===
+dp_0_decisions: Accepted TinyDB requirements from F:\Desktop\tinydb-proposal.md as the source of truth; focus on a single-file educational TinyDB with supported SQL subset, storage, B-tree indexes, transactions, CLI, zero runtime dependencies, and Linux-compatible implementation.
+dp_0_result: confirmed
+dp_0_confirmed: true
+dp_0_timestamp: 2026-07-15T08:26:54Z
+dp_1_result: not applicable: requirements source and scope were confirmed through DP-0 and DP-2 using F:\Desktop\tinydb-proposal.md and generated planning artifacts
+dp_1_timestamp: 2026-07-15T12:08:48Z
+dp_2_result: approved: proposal/specs/design/tasks reviewed by user; proceed to contract-builder
+dp_2_timestamp: 2026-07-15T08:41:11Z
+dp_3_result: approved: execution contract accepted by user; build may proceed after DP-4 execution mode selection
+dp_3_timestamp: 2026-07-15T08:50:08Z
+dp_4_result: SDD: multi-batch database implementation with cross-module dependencies, new API, file format, B-tree, transactions, and CLI risk indicators; TDD remains mandatory per task
+dp_4_timestamp: 2026-07-15T08:52:17Z
+dp_5_result: not triggered: review-fix/debug loops resolved without 3+ failed fixes or architecture escalation
+dp_5_timestamp: 2026-07-15T12:08:48Z
+dp_6_result: pass: compileall, full pytest suite (117 passed), CLI prompt smoke, git diff --check, and Batch 1-9 reviews plus Windows UAT REPL prompt fix passed
+dp_6_timestamp: 2026-07-16T03:35:50Z
+dp_7_result: confirmed: user approved archive after Windows UAT prompt fix; specs merged, all 9 batches complete, fresh validation passed
+dp_7_timestamp: 2026-07-16T03:42:26Z
