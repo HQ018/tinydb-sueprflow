@@ -32,7 +32,7 @@ dp_2_result: approved: user approved proposal/specs/design/tasks artifacts; proc
 dp_2_timestamp: 2026-07-16T10:48:48Z
 dp_3_result: approved: execution contract accepted by user; build may proceed after DP-4 execution mode selection and mandatory worktree isolation
 dp_3_timestamp: 2026-07-16T10:56:41Z
-dp_4_result: SDD Task 3: isolated planner worktree with TDD
+dp_4_result: SDD: user-assigned isolated Batch 4 executor worktree; implementation will follow the approved execution contract.
 dp_4_timestamp: 2026-07-16T11:16:11Z
 dp_5_result: null
 dp_5_timestamp: null

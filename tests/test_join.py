@@ -6,6 +6,7 @@ from tinydb.catalog import Catalog
 from tinydb.errors import ConstraintError, ParseError
 from tinydb.planner import JoinPlan, Planner
 from tinydb.sql import ColumnRef, Identifier, JoinPredicate, JoinSource, Select, parse_sql
+from tinydb import Database
 
 
 def test_join_ast_structures_are_immutable_and_readable():
@@ -184,6 +185,42 @@ def test_planner_rejects_unknown_qualified_join_column():
         Planner(join_catalog()).plan(statement)
 
 
+def test_executor_returns_only_equality_matching_join_rows(tmp_path):
+    db = seeded_join_database(tmp_path)
+
+    result = db.execute(
+        "SELECT u.name, o.total "
+        "FROM users AS u INNER JOIN orders AS o ON u.id = o.user_id"
+    )
+
+    assert result.columns == ("u.name", "o.total")
+    assert result.rows == (("Ada", 15.0), ("Ada", 25.0), ("Lin", 35.0))
+
+
+def test_executor_applies_where_after_join_rows_are_formed(tmp_path):
+    db = seeded_join_database(tmp_path)
+
+    result = db.execute(
+        "SELECT u.name, o.total "
+        "FROM users AS u INNER JOIN orders AS o ON u.id = o.user_id "
+        "WHERE o.total >= 25"
+    )
+
+    assert result.rows == (("Ada", 25.0), ("Lin", 35.0))
+
+
+def test_executor_orders_and_pages_joined_rows(tmp_path):
+    db = seeded_join_database(tmp_path)
+
+    result = db.execute(
+        "SELECT u.name, o.total "
+        "FROM users AS u INNER JOIN orders AS o ON u.id = o.user_id "
+        "ORDER BY o.total DESC LIMIT 1 OFFSET 1"
+    )
+
+    assert result.rows == (("Ada", 25.0),)
+
+
 def join_catalog() -> Catalog:
     catalog = Catalog()
     catalog.apply_create_table(
@@ -208,3 +245,19 @@ def joined_select(projections):
             ),
         ),
     )
+
+
+def seeded_join_database(tmp_path) -> Database:
+    db = Database(tmp_path / "join-executor.db")
+    db.execute("CREATE TABLE users (id INT PRIMARY KEY, name TEXT)")
+    db.execute("CREATE TABLE orders (id INT PRIMARY KEY, user_id INT, total FLOAT)")
+    db.execute("BEGIN")
+    db.execute("INSERT INTO users (id, name) VALUES (1, 'Ada')")
+    db.execute("INSERT INTO users (id, name) VALUES (2, 'Grace')")
+    db.execute("INSERT INTO users (id, name) VALUES (3, 'Lin')")
+    db.execute("INSERT INTO orders (id, user_id, total) VALUES (10, 1, 15.0)")
+    db.execute("INSERT INTO orders (id, user_id, total) VALUES (11, 1, 25.0)")
+    db.execute("INSERT INTO orders (id, user_id, total) VALUES (12, 3, 35.0)")
+    db.execute("INSERT INTO orders (id, user_id, total) VALUES (13, 99, 100.0)")
+    db.execute("COMMIT")
+    return db
