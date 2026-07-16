@@ -1,0 +1,42 @@
+# .spec-superflow.yaml — lightweight state machine
+# Derived data. Always rebuildable from artifacts. Lost/corrupt → fall back to content-level detection.
+
+# === Core state ===
+state: executing
+workflow: full
+
+# === Hashes (fast staleness detection) ===
+artifacts_hash: sha256:ae4ee6a2c2701108484c654aa62191f0683d2c430244dd7bd03e006ada1fc474
+contract_hash: sha256:6e525b539705bf9834612edfdb0cca7f101fa5993bb8c3208282332f7c25d005
+
+# === Execution progress ===
+execution_mode: SDD
+batches_completed: 0
+test_result: null
+spec_merged: false
+
+# === Metadata ===
+change_name: cli-enhancements
+last_transition: 2026-07-16T11:16:20.946Z
+last_transition_from: approved-for-build
+last_transition_to: executing
+
+# === Decision points ===
+dp_0_decisions: >
+dp_0_result: confirmed
+dp_0_confirmed: true
+dp_0_timestamp: 2026-07-16T10:21:14Z
+dp_1_result: null
+dp_1_timestamp: null
+dp_2_result: approved: user approved proposal/specs/design/tasks artifacts; proceed to contract-builder with parallel-friendly worktree constraints
+dp_2_timestamp: 2026-07-16T10:48:48Z
+dp_3_result: approved: execution contract accepted by user; build may proceed after DP-4 execution mode selection and mandatory worktree isolation
+dp_3_timestamp: 2026-07-16T10:56:41Z
+dp_4_result: SDD: user selected SDD; contract defines interface-first batches and parallel isolated worktrees for independent implementation streams
+dp_4_timestamp: 2026-07-16T11:16:11Z
+dp_5_result: null
+dp_5_timestamp: null
+dp_6_result: null
+dp_6_timestamp: null
+dp_7_result: null
+dp_7_timestamp: null

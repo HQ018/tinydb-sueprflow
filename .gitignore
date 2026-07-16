@@ -29,3 +29,6 @@ Thumbs.db
 
 # spec-superflow execution scratch files
 .superpowers/
+
+# Local git worktrees
+.worktrees/
