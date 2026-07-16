@@ -16,7 +16,7 @@ TinyDB 是一个从零构建的 Python 嵌入式关系型数据库。它通过 S
 - 存储：单 `.db` 文件持久化
 - 索引：B-tree 等值和范围查询支持
 - 事务：`BEGIN`、`COMMIT`、`ROLLBACK`
-- 命令行：单语句执行、脚本执行、交互式 REPL
+- 命令行：单语句执行、脚本执行、交互式 REPL、多行输入、dot commands、可选 ANSI 颜色和 `.explain`
 
 ## 快速开始
 
@@ -60,6 +60,29 @@ tinydb>
 
 使用 `.exit` 或 `.quit` 退出。
 
+REPL 支持多行 SQL，直到遇到分号才执行：
+
+```text
+tinydb> CREATE TABLE users (
+...>   id INT PRIMARY KEY,
+...>   name TEXT
+...> );
+created table users
+```
+
+常用 dot commands：
+
+```text
+tinydb> .help
+tinydb> .tables
+tinydb> .schema users
+tinydb> .explain SELECT * FROM users
+SCAN users
+tinydb> .quit
+```
+
+交互式终端会在支持时使用 ANSI 颜色高亮 SQL 关键字和结果表头；非交互输出默认保持纯文本。设置 `NO_COLOR=1` 可关闭颜色。
+
 ## 开发验证
 
 ```bash
@@ -68,7 +91,7 @@ python -B -m pytest
 git diff --check
 ```
 
-当前归档验证结果：`117 passed`。
+当前归档验证结果：`139 passed`。
 
 ## 项目结构
 
