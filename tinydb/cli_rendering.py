@@ -33,7 +33,8 @@ def render_result(result: Result, *, color: bool = False) -> str:
     if result.message:
         lines.append(result.message)
     if result.columns:
-        lines.append("\t".join(result.columns))
+        header = "\t".join(result.columns)
+        lines.append(f"{_ANSI_CYAN}{header}{_ANSI_RESET}" if color else header)
         lines.extend("\t".join(_format_value(value) for value in row) for row in result.rows)
     elif result.rows_affected is not None and not result.message:
         noun = "row" if result.rows_affected == 1 else "rows"

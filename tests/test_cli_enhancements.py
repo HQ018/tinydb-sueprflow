@@ -99,6 +99,12 @@ def test_render_sql_highlights_keywords_with_ansi_tokens_when_explicitly_enabled
     )
 
 
+def test_render_result_highlights_column_headers_when_explicitly_enabled():
+    rendered = render_result(Result(columns=("id", "name"), rows=((1, "Ada"),)), color=True)
+
+    assert rendered == "\x1b[36mid\tname\x1b[0m\n1\tAda\n"
+
+
 def test_supports_color_respects_no_color_environment(monkeypatch):
     monkeypatch.setenv("NO_COLOR", "1")
 
