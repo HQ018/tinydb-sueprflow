@@ -31,7 +31,7 @@ or changes to `changes/tinydb` were introduced.
   documentation changes. It starts a child process that holds an explicit
   write transaction, then asserts the parent `Database(lock_timeout=0.05)`
   write fails with `ConcurrencyError` after approximately the configured wait
-  (`>= 0.04` and `< 1` second).
+  (`>= 0.04` and `< 0.3` seconds).
 - Focused execution:
   `python -m pytest tests/test_concurrency.py::test_database_write_conflict_honors_configured_lock_timeout -vv`
   -> `1 passed`.
