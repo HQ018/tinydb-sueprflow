@@ -68,6 +68,17 @@ def test_lock_handle_releases_when_its_context_exits(tmp_path):
     assert adapter.release_calls == 1
 
 
+def test_lock_handle_releases_when_its_context_raises(tmp_path):
+    adapter = RecordingAdapter()
+    manager = LockManager(tmp_path / "app.db", adapter=adapter)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        with manager.acquire_exclusive():
+            raise RuntimeError("boom")
+
+    assert adapter.release_calls == 1
+
+
 def test_platform_lock_times_out_against_subprocess_and_releases_after_exit(tmp_path):
     database_path = tmp_path / "app.db"
     database_path.write_text("committed data", encoding="utf-8")

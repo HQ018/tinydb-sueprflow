@@ -35,6 +35,11 @@ under `changes/tinydb` were made.
 - `python -m compileall tinydb tests` -> exit 0.
 - `python -m pytest` -> `127 passed`.
 - `git diff --check` -> exit 0.
+- Post-review fix: added exception-path context manager coverage for
+  `LockHandle`.
+- Post-review focused rerun: `python -m pytest tests/test_concurrency.py -q`
+  -> `11 passed`.
+- Post-review full rerun: `python -m pytest` -> `128 passed`.
 
 ## Platform Coverage And Boundary
 
