@@ -2,8 +2,10 @@ from types import SimpleNamespace
 
 from tinydb.cli_commands import CommandRegistry, CommandResult
 from tinydb.cli_rendering import render_result, render_sql, supports_color
+from tinydb.catalog import ColumnSchema, TableSchema
 from tinydb.explain import PlanExplainer
 from tinydb.result import Result
+from tinydb.types import TinyType
 
 
 def test_command_registry_dispatches_registered_command_to_structured_result():
@@ -19,6 +21,63 @@ def test_command_registry_dispatches_registered_command_to_structured_result():
     result = registry.dispatch(".ping now", SimpleNamespace(database="fake-db"))
 
     assert result == CommandResult(exit_requested=False, output="pong\n")
+
+
+def test_builtin_help_lists_available_dot_commands():
+    registry = CommandRegistry.with_builtins()
+
+    result = registry.dispatch(".help", SimpleNamespace())
+
+    assert result.exit_requested is False
+    assert ".help" in result.output
+    assert ".tables" in result.output
+    assert ".schema" in result.output
+    assert ".quit" in result.output
+
+
+def test_builtin_quit_requests_exit_without_terminal_io():
+    registry = CommandRegistry.with_builtins()
+
+    result = registry.dispatch(".quit", SimpleNamespace())
+
+    assert result == CommandResult(exit_requested=True, output="")
+
+
+def test_unknown_dot_command_returns_concise_user_error_without_keyerror():
+    registry = CommandRegistry.with_builtins()
+
+    result = registry.dispatch(".doesnotexist", SimpleNamespace())
+
+    assert result.exit_requested is False
+    assert result.output == "error: unknown command: .doesnotexist\n"
+    assert "KeyError" not in result.output
+
+
+def test_builtin_tables_lists_catalog_tables_from_context_database():
+    registry = CommandRegistry.with_builtins()
+    context = _fake_command_context()
+
+    result = registry.dispatch(".tables", context)
+
+    assert result == CommandResult(exit_requested=False, output="orders\nusers\n")
+
+
+def test_builtin_schema_describes_requested_table_from_context_database():
+    registry = CommandRegistry.with_builtins()
+    context = _fake_command_context()
+
+    result = registry.dispatch(".schema users", context)
+
+    assert result == CommandResult(
+        exit_requested=False,
+        output=(
+            "CREATE TABLE users (\n"
+            "  id INT PRIMARY KEY,\n"
+            "  name TEXT NOT NULL,\n"
+            "  email TEXT UNIQUE\n"
+            ")\n"
+        ),
+    )
 
 
 def test_rendering_helpers_provide_plain_fallbacks_for_sql_and_results():
@@ -38,3 +97,40 @@ def test_plan_explainer_delegates_to_fake_planner():
     explainer = PlanExplainer(FakePlanner())
 
     assert explainer.explain("SELECT * FROM users") == "SCAN users"
+
+
+def _fake_command_context() -> SimpleNamespace:
+    users = TableSchema(
+        "users",
+        (
+            ColumnSchema("id", TinyType.INT, primary_key=True, not_null=True, unique=True),
+            ColumnSchema("name", TinyType.TEXT, not_null=True),
+            ColumnSchema("email", TinyType.TEXT, unique=True),
+        ),
+    )
+    orders = TableSchema("orders", (ColumnSchema("id", TinyType.INT, primary_key=True),))
+
+    catalog = SimpleNamespace(to_dict=lambda: _catalog_data(users, orders))
+    database = SimpleNamespace(catalog=catalog)
+    return SimpleNamespace(database=database)
+
+
+def _catalog_data(*tables: TableSchema) -> dict[str, object]:
+    return {
+        "tables": [
+            {
+                "name": table.name,
+                "columns": [
+                    {
+                        "name": column.name,
+                        "type": column.type.value,
+                        "primary_key": column.primary_key,
+                        "not_null": column.not_null,
+                        "unique": column.unique,
+                    }
+                    for column in table.columns
+                ],
+            }
+            for table in tables
+        ]
+    }
