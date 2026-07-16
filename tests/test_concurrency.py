@@ -3,6 +3,7 @@ from queue import Queue
 import subprocess
 import sys
 from threading import Event, Lock, Thread
+import time
 
 import pytest
 
@@ -161,6 +162,54 @@ finally:
         assert reopened.execute("SELECT id, name FROM users").rows == ()
     finally:
         reopened.close()
+
+
+def test_database_write_conflict_honors_configured_lock_timeout(tmp_path):
+    database_path = tmp_path / "write-timeout.db"
+    parent = Database(database_path, lock_timeout=0.05)
+    parent.execute("CREATE TABLE users (id INT PRIMARY KEY, name TEXT NOT NULL)")
+    child_code = """
+from pathlib import Path
+import sys
+from tinydb import Database
+
+db = Database(Path(sys.argv[1]), lock_timeout=1)
+try:
+    db.execute("BEGIN")
+    db.execute("INSERT INTO users (id, name) VALUES (1, 'Ada')")
+    print("transaction-open", flush=True)
+    sys.stdin.readline()
+finally:
+    try:
+        db.execute("ROLLBACK")
+    except Exception:
+        pass
+    db.close()
+"""
+    child = subprocess.Popen(
+        [sys.executable, "-c", child_code, str(database_path)],
+        cwd=Path(__file__).parent.parent,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    try:
+        assert child.stdout.readline().strip() == "transaction-open"
+
+        started = time.monotonic()
+        with pytest.raises(ConcurrencyError):
+            parent.execute("INSERT INTO users (id, name) VALUES (2, 'Grace')")
+        elapsed = time.monotonic() - started
+
+        assert elapsed >= 0.04
+        assert elapsed < 1
+    finally:
+        _, stderr = child.communicate("rollback\n", timeout=5)
+        parent.close()
+
+    assert child.returncode == 0, stderr
 
 
 def test_platform_lock_uses_posix_flock_and_releases_it(tmp_path, monkeypatch):
