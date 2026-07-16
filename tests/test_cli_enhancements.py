@@ -10,6 +10,11 @@ from tinydb.result import Result
 from tinydb.types import TinyType
 
 
+class TtyStringIO(StringIO):
+    def isatty(self) -> bool:
+        return True
+
+
 def test_command_registry_dispatches_registered_command_to_structured_result():
     registry = CommandRegistry()
 
@@ -118,6 +123,47 @@ def test_print_result_uses_plain_output_for_non_interactive_streams():
 
     assert output.getvalue() == "id\n1\n"
     assert "\x1b[" not in output.getvalue()
+
+
+def test_print_result_uses_color_for_interactive_streams():
+    output = TtyStringIO()
+
+    print_result(Result(columns=("id",), rows=((1,),)), output)
+
+    assert output.getvalue() == "\x1b[36mid\x1b[0m\n1\n"
+
+
+def test_print_result_respects_no_color_for_interactive_streams(monkeypatch):
+    monkeypatch.setenv("NO_COLOR", "1")
+    output = TtyStringIO()
+
+    print_result(Result(columns=("id",), rows=((1,),)), output)
+
+    assert output.getvalue() == "id\n1\n"
+
+
+def test_repl_echoes_completed_sql_with_color_for_interactive_streams():
+    class RecordingDatabase:
+        def __init__(self) -> None:
+            self.statements: list[str] = []
+
+        def execute(self, statement: str) -> Result:
+            self.statements.append(statement)
+            return Result(message="executed")
+
+    database = RecordingDatabase()
+    output = TtyStringIO()
+
+    exit_code = run_repl(
+        database,
+        StringIO("SELECT * FROM users;\n.quit\n"),
+        output,
+        prompt="",
+    )
+
+    assert exit_code == 0
+    assert database.statements == ["SELECT * FROM users"]
+    assert "\x1b[36mSELECT\x1b[0m * \x1b[36mFROM\x1b[0m users\n" in output.getvalue()
 
 
 def test_plan_explainer_delegates_to_fake_planner():

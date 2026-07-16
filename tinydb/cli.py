@@ -8,6 +8,7 @@ from typing import TextIO
 from tinydb.api import Database
 from tinydb.cli_commands import CommandRegistry
 from tinydb.cli_rendering import render_result as render_cli_result
+from tinydb.cli_rendering import render_sql
 from tinydb.cli_rendering import supports_color
 from tinydb.errors import TinyDBError
 from tinydb.result import Result
@@ -162,8 +163,13 @@ def run_repl(
             continue
 
         buffered_lines.clear()
+        statement_to_execute = statement.rstrip(";").strip()
+        use_color = supports_color(output_stream)
+        if use_color:
+            output_stream.write(render_sql(statement_to_execute, color=True) + "\n")
+            output_stream.flush()
         try:
-            print_result(database.execute(statement.rstrip(";").strip()), output_stream)
+            print_result(database.execute(statement_to_execute), output_stream)
         except TinyDBError as exc:
             print_error(exc, errors)
 
