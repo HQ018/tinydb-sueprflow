@@ -204,7 +204,7 @@ finally:
         elapsed = time.monotonic() - started
 
         assert elapsed >= 0.04
-        assert elapsed < 1
+        assert elapsed < 0.3
     finally:
         _, stderr = child.communicate("rollback\n", timeout=5)
         parent.close()
