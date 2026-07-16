@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 from io import StringIO
 
-from tinydb.cli import run_repl
+from tinydb.cli import print_result, run_repl
 from tinydb.cli_commands import CommandRegistry, CommandResult
 from tinydb.cli_rendering import render_result, render_sql, supports_color
 from tinydb.catalog import ColumnSchema, TableSchema
@@ -88,6 +88,30 @@ def test_rendering_helpers_provide_plain_fallbacks_for_sql_and_results():
     assert render_sql("SELECT * FROM users", color=False) == "SELECT * FROM users"
     assert render_result(result, color=False) == "id\tname\n1\tNULL\n"
     assert supports_color(SimpleNamespace(isatty=lambda: False)) is False
+
+
+def test_render_sql_highlights_keywords_with_ansi_tokens_when_explicitly_enabled():
+    rendered = render_sql("SELECT id FROM users WHERE active = true", color=True)
+
+    assert rendered == (
+        "\x1b[36mSELECT\x1b[0m id \x1b[36mFROM\x1b[0m users "
+        "\x1b[36mWHERE\x1b[0m active = \x1b[36mtrue\x1b[0m"
+    )
+
+
+def test_supports_color_respects_no_color_environment(monkeypatch):
+    monkeypatch.setenv("NO_COLOR", "1")
+
+    assert supports_color(SimpleNamespace(isatty=lambda: True)) is False
+
+
+def test_print_result_uses_plain_output_for_non_interactive_streams():
+    output = StringIO()
+
+    print_result(Result(columns=("id",), rows=((1,),)), output)
+
+    assert output.getvalue() == "id\n1\n"
+    assert "\x1b[" not in output.getvalue()
 
 
 def test_plan_explainer_delegates_to_fake_planner():

@@ -7,6 +7,8 @@ from typing import TextIO
 
 from tinydb.api import Database
 from tinydb.cli_commands import CommandRegistry
+from tinydb.cli_rendering import render_result as render_cli_result
+from tinydb.cli_rendering import supports_color
 from tinydb.errors import TinyDBError
 from tinydb.result import Result
 
@@ -37,25 +39,8 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def format_value(value: object) -> str:
-    if value is None:
-        return "NULL"
-    return str(value)
-
-
 def render_result(result: Result) -> str:
-    lines: list[str] = []
-    if result.message:
-        lines.append(result.message)
-    if result.columns:
-        lines.append("\t".join(result.columns))
-        lines.extend("\t".join(format_value(value) for value in row) for row in result.rows)
-    elif result.rows_affected is not None and not result.message:
-        noun = "row" if result.rows_affected == 1 else "rows"
-        lines.append(f"{result.rows_affected} {noun} affected")
-    if not lines:
-        return ""
-    return "\n".join(lines) + "\n"
+    return render_cli_result(result)
 
 
 def split_script(script: str) -> list[str]:
@@ -90,7 +75,7 @@ def split_script(script: str) -> list[str]:
 
 
 def print_result(result: Result, output_stream: TextIO) -> None:
-    rendered = render_result(result)
+    rendered = render_cli_result(result, color=supports_color(output_stream))
     if rendered:
         output_stream.write(rendered)
         output_stream.flush()

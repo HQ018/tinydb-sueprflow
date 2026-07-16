@@ -1,7 +1,20 @@
 import os
+import re
 from typing import TextIO
 
 from tinydb.result import Result
+
+
+_ANSI_CYAN = "\x1b[36m"
+_ANSI_RESET = "\x1b[0m"
+_SQL_KEYWORDS = re.compile(
+    r"\b("
+    r"SELECT|FROM|WHERE|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|TABLE|DROP|"
+    r"PRIMARY|KEY|NOT|NULL|UNIQUE|AND|OR|ORDER|BY|ASC|DESC|LIMIT|OFFSET|"
+    r"GROUP|COUNT|SUM|AVG|TRUE|FALSE"
+    r")\b",
+    re.IGNORECASE,
+)
 
 
 def supports_color(stream: TextIO) -> bool:
@@ -10,6 +23,8 @@ def supports_color(stream: TextIO) -> bool:
 
 
 def render_sql(sql: str, *, color: bool = False) -> str:
+    if color:
+        return _SQL_KEYWORDS.sub(lambda match: f"{_ANSI_CYAN}{match.group(0)}{_ANSI_RESET}", sql)
     return sql
 
 
