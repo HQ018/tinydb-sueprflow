@@ -4,7 +4,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from tinydb.errors import TransactionError
+from tinydb.errors import ConcurrencyError, TransactionError
+from tinydb.locking import LockHandle, LockManager
 from tinydb.storage.file import (
     RecoveryState,
     RecoveryStatus,
@@ -15,8 +16,10 @@ from tinydb.storage.file import (
 
 
 class TransactionManager:
-    def __init__(self, storage: StorageManager):
+    def __init__(self, storage: StorageManager, lock_timeout: float | None = None):
         self.storage = storage
+        self._lock_manager = LockManager(storage.lock_path, timeout=lock_timeout)
+        self._lock_handle: LockHandle | None = None
         self._snapshot: bytes | None = None
         self._in_transaction = False
         self._writer_path: Path | None = None
@@ -45,19 +48,23 @@ class TransactionManager:
 
     def commit(self) -> None:
         self._require_active()
-        self.storage._clear_transaction_recovery_snapshot()
-        self._snapshot = None
-        self._in_transaction = False
-        self._release_writer()
+        try:
+            self.storage._clear_transaction_recovery_snapshot()
+        finally:
+            self._finish_transaction()
 
     def rollback(self) -> None:
         self._require_active()
         if self._snapshot is None:
             raise TransactionError("transaction snapshot is missing")
-        self.storage._restore_file_snapshot(self._snapshot)
-        self._snapshot = None
-        self._in_transaction = False
-        self._release_writer()
+        try:
+            self.storage._restore_file_snapshot(self._snapshot)
+        finally:
+            self._finish_transaction()
+
+    def close(self) -> None:
+        if self._in_transaction:
+            self.rollback()
 
     @contextmanager
     def statement(self) -> Iterator[None]:
@@ -84,11 +91,29 @@ class TransactionManager:
             raise TransactionError("no active transaction")
 
     def _acquire_writer(self) -> None:
-        self._writer_path = _acquire_same_process_writer(self.storage.path)
+        try:
+            self._writer_path = _acquire_same_process_writer(self.storage.lock_path)
+        except TransactionError as exc:
+            raise ConcurrencyError(
+                f"database already has an active writer: {self.storage.lock_path}"
+            ) from exc
+        try:
+            self._lock_handle = self._lock_manager.acquire_exclusive()
+        except Exception:
+            self._release_writer()
+            raise
 
     def _release_writer(self) -> None:
         _release_same_process_writer(self._writer_path)
         self._writer_path = None
+        if self._lock_handle is not None:
+            self._lock_handle.release()
+            self._lock_handle = None
+
+    def _finish_transaction(self) -> None:
+        self._snapshot = None
+        self._in_transaction = False
+        self._release_writer()
 
 
 __all__ = [

@@ -79,6 +79,11 @@ class StorageManager:
             self._closed = True
             raise
 
+    @property
+    def lock_path(self) -> Path:
+        """Return the resolved database identity used by transaction locks."""
+        return self.path.resolve()
+
     def allocate_page(self, data: bytes = b"") -> int:
         self._require_open()
         page_id = self.page_count()

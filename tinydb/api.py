@@ -9,12 +9,12 @@ from tinydb.transaction import TransactionManager
 
 
 class Database:
-    def __init__(self, path: str | Path):
+    def __init__(self, path: str | Path, lock_timeout: float | None = None):
         self._instance_lock = RLock()
         self.path = Path(path)
         self._closed = False
         self._storage = StorageManager(self.path)
-        self._transactions = TransactionManager(self._storage)
+        self._transactions = TransactionManager(self._storage, lock_timeout=lock_timeout)
         self._executor = Executor(self._storage, self._transactions)
 
     def execute(self, sql: str, parameters: object = None):
@@ -30,6 +30,7 @@ class Database:
     def close(self) -> None:
         with self._instance_lock:
             if not self._closed:
+                self._transactions.close()
                 self._storage.close()
                 self._closed = True
 

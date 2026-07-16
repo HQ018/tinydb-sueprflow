@@ -319,3 +319,36 @@ def test_database_close_enters_instance_lock_before_closing_storage(tmp_path):
     assert not worker.is_alive()
     assert storage.closed.is_set()
     assert lock.exit_called.is_set()
+
+
+def test_explicit_transaction_rejects_conflicting_write_with_concurrency_error(tmp_path):
+    path = tmp_path / "transaction-conflict.db"
+    first = Database(path, lock_timeout=0)
+    first.execute("CREATE TABLE users (id INT PRIMARY KEY, name TEXT NOT NULL)")
+    second = Database(path, lock_timeout=0)
+
+    try:
+        first.execute("BEGIN")
+
+        with pytest.raises(ConcurrencyError):
+            second.execute("INSERT INTO users (id, name) VALUES (1, 'Ada')")
+
+        first.execute("ROLLBACK")
+        assert second.execute("INSERT INTO users (id, name) VALUES (1, 'Ada')").rows_affected == 1
+    finally:
+        first.close()
+        second.close()
+
+
+def test_closing_active_transaction_releases_its_write_lock(tmp_path):
+    path = tmp_path / "close-releases-lock.db"
+    first = Database(path, lock_timeout=0)
+    first.execute("CREATE TABLE users (id INT PRIMARY KEY, name TEXT NOT NULL)")
+    second = Database(path, lock_timeout=0)
+
+    first.execute("BEGIN")
+    first.close()
+    try:
+        assert second.execute("INSERT INTO users (id, name) VALUES (1, 'Ada')").rows_affected == 1
+    finally:
+        second.close()
