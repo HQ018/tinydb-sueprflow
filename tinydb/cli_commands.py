@@ -2,6 +2,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from tinydb.errors import TinyDBError
+from tinydb.explain import PlanExplainer
+from tinydb.planner import Planner
+
 
 @dataclass(frozen=True)
 class CommandResult:
@@ -23,6 +27,7 @@ class CommandRegistry:
         registry.register(".quit", _handle_quit)
         registry.register(".tables", _handle_tables)
         registry.register(".schema", _handle_schema)
+        registry.register(".explain", _handle_explain)
         return registry
 
     def register(self, name: str, handler: CommandHandler) -> None:
@@ -46,6 +51,7 @@ def _handle_help(argument: str, context: object) -> CommandResult:
             "  .help           Show available dot commands.\n"
             "  .tables         List tables in the current database.\n"
             "  .schema [table] Show CREATE TABLE schema for one or all tables.\n"
+            "  .explain SQL    Show the SQL execution plan without running it.\n"
             "  .quit           Exit the REPL.\n"
         )
     )
@@ -71,6 +77,15 @@ def _handle_schema(argument: str, context: object) -> CommandResult:
         return CommandResult(output=f"error: no schema found for {target}\n")
 
     output = "\n".join(_format_table_schema(table) for table in selected)
+    return CommandResult(output=f"{output}\n")
+
+
+def _handle_explain(argument: str, context: object) -> CommandResult:
+    try:
+        catalog = _catalog_from_context(context)
+        output = PlanExplainer(Planner(catalog)).explain(argument)
+    except TinyDBError as exc:
+        return CommandResult(output=f"error: {exc}\n")
     return CommandResult(output=f"{output}\n")
 
 

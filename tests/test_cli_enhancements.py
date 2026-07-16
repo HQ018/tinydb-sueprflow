@@ -177,6 +177,39 @@ def test_plan_explainer_delegates_to_fake_planner():
     assert explainer.explain("SELECT * FROM users") == "SCAN users"
 
 
+def test_plan_explainer_formats_table_scan_from_real_planner():
+    from tinydb.planner import Planner
+
+    catalog = _catalog_from_tables(_users_schema())
+    explainer = PlanExplainer(Planner(catalog))
+
+    assert explainer.explain("SELECT * FROM users") == "SCAN users"
+
+
+def test_builtin_explain_outputs_stable_plan_without_executing_sql():
+    registry = CommandRegistry.with_builtins()
+    database = _FakeExplainDatabase(_catalog_from_tables(_users_schema()))
+
+    result = registry.dispatch(".explain SELECT * FROM users", SimpleNamespace(database=database))
+
+    assert result == CommandResult(exit_requested=False, output="SCAN users\n")
+    assert database.executed == []
+
+
+def test_builtin_explain_reports_unsupported_sql_as_user_error():
+    registry = CommandRegistry.with_builtins()
+    database = _FakeExplainDatabase(_catalog_from_tables(_users_schema()))
+
+    result = registry.dispatch(
+        ".explain INSERT INTO users (id, name) VALUES (1, 'Ada')",
+        SimpleNamespace(database=database),
+    )
+
+    assert result.exit_requested is False
+    assert result.output == "error: .explain only supports SELECT statements\n"
+    assert database.executed == []
+
+
 def test_repl_dispatches_dot_commands_immediately_while_sql_is_buffered():
     class RecordingDatabase:
         def __init__(self) -> None:
@@ -203,7 +236,16 @@ def test_repl_dispatches_dot_commands_immediately_while_sql_is_buffered():
 
 
 def _fake_command_context() -> SimpleNamespace:
-    users = TableSchema(
+    users = _users_schema()
+    orders = TableSchema("orders", (ColumnSchema("id", TinyType.INT, primary_key=True),))
+
+    catalog = SimpleNamespace(to_dict=lambda: _catalog_data(users, orders))
+    database = SimpleNamespace(catalog=catalog)
+    return SimpleNamespace(database=database)
+
+
+def _users_schema() -> TableSchema:
+    return TableSchema(
         "users",
         (
             ColumnSchema("id", TinyType.INT, primary_key=True, not_null=True, unique=True),
@@ -211,11 +253,22 @@ def _fake_command_context() -> SimpleNamespace:
             ColumnSchema("email", TinyType.TEXT, unique=True),
         ),
     )
-    orders = TableSchema("orders", (ColumnSchema("id", TinyType.INT, primary_key=True),))
 
-    catalog = SimpleNamespace(to_dict=lambda: _catalog_data(users, orders))
-    database = SimpleNamespace(catalog=catalog)
-    return SimpleNamespace(database=database)
+
+def _catalog_from_tables(*tables: TableSchema):
+    from tinydb.catalog import Catalog
+
+    return Catalog.from_dict(_catalog_data(*tables))
+
+
+class _FakeExplainDatabase:
+    def __init__(self, catalog):
+        self.catalog = catalog
+        self.executed: list[str] = []
+
+    def execute(self, sql: str):
+        self.executed.append(sql)
+        raise AssertionError(".explain must not execute SQL")
 
 
 def _catalog_data(*tables: TableSchema) -> dict[str, object]:
