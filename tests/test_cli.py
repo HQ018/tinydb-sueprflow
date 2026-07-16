@@ -129,9 +129,9 @@ def test_cli_repl_executes_statement_and_exit(tmp_path):
     completed = run_cli(
         str(database),
         input_text=(
-            "CREATE TABLE users (id INT PRIMARY KEY, name TEXT)\n"
-            "INSERT INTO users (id, name) VALUES (1, 'Ada')\n"
-            "SELECT id, name FROM users\n"
+            "CREATE TABLE users (id INT PRIMARY KEY, name TEXT);\n"
+            "INSERT INTO users (id, name) VALUES (1, 'Ada');\n"
+            "SELECT id, name FROM users;\n"
             ".exit\n"
         ),
     )
@@ -140,6 +140,39 @@ def test_cli_repl_executes_statement_and_exit(tmp_path):
     assert "created table users\n" in completed.stdout
     assert "inserted 1 row\n" in completed.stdout
     assert "id\tname\n1\tAda\n" in completed.stdout
+
+
+def test_cli_repl_executes_multiline_statement_once_after_terminator(tmp_path):
+    database = tmp_path / "multiline-repl.db"
+
+    completed = run_cli(
+        str(database),
+        input_text=(
+            "CREATE TABLE users (\n"
+            "  id INT PRIMARY KEY,\n"
+            "  name TEXT\n"
+            ");\n"
+            "INSERT INTO users (id, name) VALUES (1, 'Ada');\n"
+            "SELECT id,\n"
+            "       name\n"
+            "FROM users;\n"
+            ".quit\n"
+        ),
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stderr == ""
+    assert completed.stdout.count("created table users\n") == 1
+    assert completed.stdout.count("inserted 1 row\n") == 1
+    assert completed.stdout.count("id\tname\n1\tAda\n") == 1
+
+
+def test_cli_repl_reports_concise_error_for_partial_statement_at_eof(tmp_path):
+    completed = run_cli(str(tmp_path / "partial-repl.db"), input_text="SELECT\n")
+
+    assert completed.returncode == 0
+    assert completed.stderr == "error: incomplete statement\n"
+    assert "traceback" not in completed.stderr.lower()
 
 
 def test_cli_repl_prints_prompt_before_waiting_for_input(tmp_path):
@@ -162,10 +195,10 @@ def test_cli_repl_expected_error_keeps_session_alive(tmp_path):
     completed = run_cli(
         str(tmp_path / "recover.db"),
         input_text=(
-            "SELECT FROM\n"
-            "CREATE TABLE users (id INT PRIMARY KEY, name TEXT)\n"
-            "INSERT INTO users (id, name) VALUES (1, 'Ada')\n"
-            "SELECT id, name FROM users\n"
+            "SELECT FROM;\n"
+            "CREATE TABLE users (id INT PRIMARY KEY, name TEXT);\n"
+            "INSERT INTO users (id, name) VALUES (1, 'Ada');\n"
+            "SELECT id, name FROM users;\n"
             ".quit\n"
         ),
     )

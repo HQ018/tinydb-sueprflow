@@ -1,5 +1,7 @@
 from types import SimpleNamespace
+from io import StringIO
 
+from tinydb.cli import run_repl
 from tinydb.cli_commands import CommandRegistry, CommandResult
 from tinydb.cli_rendering import render_result, render_sql, supports_color
 from tinydb.catalog import ColumnSchema, TableSchema
@@ -97,6 +99,31 @@ def test_plan_explainer_delegates_to_fake_planner():
     explainer = PlanExplainer(FakePlanner())
 
     assert explainer.explain("SELECT * FROM users") == "SCAN users"
+
+
+def test_repl_dispatches_dot_commands_immediately_while_sql_is_buffered():
+    class RecordingDatabase:
+        def __init__(self) -> None:
+            self.statements: list[str] = []
+
+        def execute(self, statement: str) -> Result:
+            self.statements.append(statement)
+            return Result(message="executed")
+
+    database = RecordingDatabase()
+    output = StringIO()
+
+    exit_code = run_repl(
+        database,
+        StringIO("SELECT\n.help\n* FROM users;\n.quit\n"),
+        output,
+        prompt="",
+    )
+
+    assert exit_code == 0
+    assert database.statements == ["SELECT\n* FROM users"]
+    assert "Available commands:\n" in output.getvalue()
+    assert "executed\n" in output.getvalue()
 
 
 def _fake_command_context() -> SimpleNamespace:

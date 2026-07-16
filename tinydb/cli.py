@@ -2,9 +2,11 @@ import argparse
 import sys
 from collections.abc import Iterable, Sequence
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TextIO
 
 from tinydb.api import Database
+from tinydb.cli_commands import CommandRegistry
 from tinydb.errors import TinyDBError
 from tinydb.result import Result
 
@@ -99,6 +101,24 @@ def print_error(error: BaseException, error_stream: TextIO) -> None:
     error_stream.flush()
 
 
+def statement_is_terminated(statement: str) -> bool:
+    in_string = False
+    position = 0
+
+    while position < len(statement):
+        char = statement[position]
+        if char == "'":
+            if in_string and position + 1 < len(statement) and statement[position + 1] == "'":
+                position += 1
+            else:
+                in_string = not in_string
+        elif char == ";" and not in_string:
+            return True
+        position += 1
+
+    return False
+
+
 def execute_statements(
     database: Database,
     statements: Iterable[str],
@@ -120,22 +140,45 @@ def run_repl(
     output_stream: TextIO,
     error_stream: TextIO | None = None,
     prompt: str = "tinydb> ",
+    continuation_prompt: str = "...> ",
 ) -> int:
     errors = error_stream if error_stream is not None else output_stream
+    registry = CommandRegistry.with_builtins()
+    context = SimpleNamespace(database=database)
+    buffered_lines: list[str] = []
+
     while True:
-        if prompt:
-            output_stream.write(prompt)
+        current_prompt = continuation_prompt if buffered_lines else prompt
+        if current_prompt:
+            output_stream.write(current_prompt)
             output_stream.flush()
         line = input_stream.readline()
         if line == "":
+            if buffered_lines:
+                print_error(ValueError("incomplete statement"), errors)
             return 0
         command = line.strip()
-        if not command:
+        if command.startswith("."):
+            command_line = ".quit" if command == ".exit" else command
+            result = registry.dispatch(command_line, context)
+            if result.output:
+                output_stream.write(result.output)
+                output_stream.flush()
+            if result.exit_requested:
+                return 0
             continue
-        if command in {".exit", ".quit"}:
-            return 0
+
+        if not command and not buffered_lines:
+            continue
+
+        buffered_lines.append(line.rstrip("\r\n"))
+        statement = "\n".join(buffered_lines)
+        if not statement_is_terminated(statement):
+            continue
+
+        buffered_lines.clear()
         try:
-            print_result(database.execute(command.rstrip(";").strip()), output_stream)
+            print_result(database.execute(statement.rstrip(";").strip()), output_stream)
         except TinyDBError as exc:
             print_error(exc, errors)
 
