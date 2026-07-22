@@ -2,9 +2,14 @@ import argparse
 import sys
 from collections.abc import Iterable, Sequence
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TextIO
 
 from tinydb.api import Database
+from tinydb.cli_commands import CommandRegistry
+from tinydb.cli_rendering import render_result as render_cli_result
+from tinydb.cli_rendering import render_sql
+from tinydb.cli_rendering import supports_color
 from tinydb.errors import TinyDBError
 from tinydb.result import Result
 
@@ -35,25 +40,8 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def format_value(value: object) -> str:
-    if value is None:
-        return "NULL"
-    return str(value)
-
-
 def render_result(result: Result) -> str:
-    lines: list[str] = []
-    if result.message:
-        lines.append(result.message)
-    if result.columns:
-        lines.append("\t".join(result.columns))
-        lines.extend("\t".join(format_value(value) for value in row) for row in result.rows)
-    elif result.rows_affected is not None and not result.message:
-        noun = "row" if result.rows_affected == 1 else "rows"
-        lines.append(f"{result.rows_affected} {noun} affected")
-    if not lines:
-        return ""
-    return "\n".join(lines) + "\n"
+    return render_cli_result(result)
 
 
 def split_script(script: str) -> list[str]:
@@ -88,7 +76,7 @@ def split_script(script: str) -> list[str]:
 
 
 def print_result(result: Result, output_stream: TextIO) -> None:
-    rendered = render_result(result)
+    rendered = render_cli_result(result, color=supports_color(output_stream))
     if rendered:
         output_stream.write(rendered)
         output_stream.flush()
@@ -97,6 +85,24 @@ def print_result(result: Result, output_stream: TextIO) -> None:
 def print_error(error: BaseException, error_stream: TextIO) -> None:
     error_stream.write(f"error: {error}\n")
     error_stream.flush()
+
+
+def statement_is_terminated(statement: str) -> bool:
+    in_string = False
+    position = 0
+
+    while position < len(statement):
+        char = statement[position]
+        if char == "'":
+            if in_string and position + 1 < len(statement) and statement[position + 1] == "'":
+                position += 1
+            else:
+                in_string = not in_string
+        elif char == ";" and not in_string:
+            return True
+        position += 1
+
+    return False
 
 
 def execute_statements(
@@ -120,22 +126,50 @@ def run_repl(
     output_stream: TextIO,
     error_stream: TextIO | None = None,
     prompt: str = "tinydb> ",
+    continuation_prompt: str = "...> ",
 ) -> int:
     errors = error_stream if error_stream is not None else output_stream
+    registry = CommandRegistry.with_builtins()
+    context = SimpleNamespace(database=database)
+    buffered_lines: list[str] = []
+
     while True:
-        if prompt:
-            output_stream.write(prompt)
+        current_prompt = continuation_prompt if buffered_lines else prompt
+        if current_prompt:
+            output_stream.write(current_prompt)
             output_stream.flush()
         line = input_stream.readline()
         if line == "":
+            if buffered_lines:
+                print_error(ValueError("incomplete statement"), errors)
             return 0
         command = line.strip()
-        if not command:
+        if command.startswith("."):
+            command_line = ".quit" if command == ".exit" else command
+            result = registry.dispatch(command_line, context)
+            if result.output:
+                output_stream.write(result.output)
+                output_stream.flush()
+            if result.exit_requested:
+                return 0
             continue
-        if command in {".exit", ".quit"}:
-            return 0
+
+        if not command and not buffered_lines:
+            continue
+
+        buffered_lines.append(line.rstrip("\r\n"))
+        statement = "\n".join(buffered_lines)
+        if not statement_is_terminated(statement):
+            continue
+
+        buffered_lines.clear()
+        statement_to_execute = statement.rstrip(";").strip()
+        use_color = supports_color(output_stream)
+        if use_color:
+            output_stream.write(render_sql(statement_to_execute, color=True) + "\n")
+            output_stream.flush()
         try:
-            print_result(database.execute(command.rstrip(";").strip()), output_stream)
+            print_result(database.execute(statement_to_execute), output_stream)
         except TinyDBError as exc:
             print_error(exc, errors)
 
