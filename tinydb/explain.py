@@ -1,8 +1,8 @@
 from typing import Protocol
 
 from tinydb.errors import ExecutionError
-from tinydb.planner import IndexScanPlan, TableScanPlan
-from tinydb.sql import Select, parse_sql
+from tinydb.planner import IndexScanPlan, JoinPlan, TableScanPlan
+from tinydb.sql import ColumnRef, JoinSource, Select, parse_sql
 
 
 class LegacyPlannerExplainer(Protocol):
@@ -34,4 +34,29 @@ class PlanExplainer:
             return f"SCAN {plan.table}"
         if isinstance(plan, IndexScanPlan):
             return f"INDEX SCAN {plan.table} USING {plan.index_name}"
+        if isinstance(plan, JoinPlan):
+            return _format_join_plan(plan)
         raise ExecutionError(f"unsupported plan: {plan!r}")
+
+
+def _format_join_plan(plan: JoinPlan) -> str:
+    sources = ", ".join(_format_source(source) for source in plan.sources)
+    predicates = " AND ".join(
+        f"{_format_column(predicate.left)} = {_format_column(predicate.right)}"
+        for predicate in plan.predicates
+    )
+    if not predicates:
+        return f"JOIN {sources}"
+    return f"JOIN {sources} ON {predicates}"
+
+
+def _format_source(source: JoinSource) -> str:
+    if source.alias is None:
+        return source.table_name
+    return f"{source.table_name} AS {source.alias}"
+
+
+def _format_column(column: ColumnRef) -> str:
+    if column.qualifier is None:
+        return column.column_name
+    return f"{column.qualifier}.{column.column_name}"

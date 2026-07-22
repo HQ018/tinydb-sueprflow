@@ -186,6 +186,21 @@ def test_plan_explainer_formats_table_scan_from_real_planner():
     assert explainer.explain("SELECT * FROM users") == "SCAN users"
 
 
+def test_plan_explainer_formats_join_plan_from_real_planner():
+    from tinydb.planner import Planner
+
+    catalog = _catalog_from_tables(_users_schema(), _orders_schema())
+    explainer = PlanExplainer(Planner(catalog))
+
+    assert (
+        explainer.explain(
+            "SELECT users.name "
+            "FROM users INNER JOIN orders ON users.id = orders.user_id"
+        )
+        == "JOIN users, orders ON users.id = orders.user_id"
+    )
+
+
 def test_builtin_explain_outputs_stable_plan_without_executing_sql():
     registry = CommandRegistry.with_builtins()
     database = _FakeExplainDatabase(_catalog_from_tables(_users_schema()))
@@ -237,7 +252,7 @@ def test_repl_dispatches_dot_commands_immediately_while_sql_is_buffered():
 
 def _fake_command_context() -> SimpleNamespace:
     users = _users_schema()
-    orders = TableSchema("orders", (ColumnSchema("id", TinyType.INT, primary_key=True),))
+    orders = _orders_schema()
 
     catalog = SimpleNamespace(to_dict=lambda: _catalog_data(users, orders))
     database = SimpleNamespace(catalog=catalog)
@@ -251,6 +266,17 @@ def _users_schema() -> TableSchema:
             ColumnSchema("id", TinyType.INT, primary_key=True, not_null=True, unique=True),
             ColumnSchema("name", TinyType.TEXT, not_null=True),
             ColumnSchema("email", TinyType.TEXT, unique=True),
+        ),
+    )
+
+
+def _orders_schema() -> TableSchema:
+    return TableSchema(
+        "orders",
+        (
+            ColumnSchema("id", TinyType.INT, primary_key=True),
+            ColumnSchema("user_id", TinyType.INT, not_null=True),
+            ColumnSchema("total", TinyType.FLOAT, not_null=True),
         ),
     )
 
