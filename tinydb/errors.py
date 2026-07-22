@@ -18,6 +18,10 @@ class ConstraintError(TinyDBError):
     """Raised when schema or row constraints are violated."""
 
 
+class ConcurrencyError(TinyDBError):
+    """Raised when TinyDB cannot safely acquire a concurrency lock."""
+
+
 class StorageError(TinyDBError):
     """Raised when database file storage cannot be read or written safely."""
 

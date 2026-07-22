@@ -10,6 +10,12 @@ class Identifier:
 
 
 @dataclass(frozen=True)
+class ColumnRef:
+    qualifier: str | None
+    column_name: str
+
+
+@dataclass(frozen=True)
 class Literal:
     value: object
 
@@ -27,7 +33,19 @@ class FunctionCall:
     arguments: tuple[Expression, ...]
 
 
-Expression: TypeAlias = Identifier | Literal | BinaryExpression | FunctionCall
+Expression: TypeAlias = Identifier | ColumnRef | Literal | BinaryExpression | FunctionCall
+
+
+@dataclass(frozen=True)
+class JoinSource:
+    table_name: str
+    alias: str | None = None
+
+
+@dataclass(frozen=True)
+class JoinPredicate:
+    left: ColumnRef
+    right: ColumnRef
 
 
 @dataclass(frozen=True)
@@ -41,7 +59,7 @@ class ColumnDef:
 
 @dataclass(frozen=True)
 class Ordering:
-    expression: Identifier
+    expression: Identifier | ColumnRef
     descending: bool = False
 
 
@@ -78,6 +96,9 @@ class Select:
     order_by: tuple[Ordering, ...] = ()
     limit: int | None = None
     offset: int | None = None
+    table_alias: str | None = None
+    join_sources: tuple[JoinSource, ...] = ()
+    join_predicates: tuple[JoinPredicate, ...] = ()
 
 
 @dataclass(frozen=True)

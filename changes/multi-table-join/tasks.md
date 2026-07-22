@@ -35,7 +35,7 @@ Interfaces:
 - **Consumes**: existing parser, planner, and executor public shapes.
 - **Produces**: stable join AST and plan structures.
 
-- [ ] **1.1 Write failing interface tests**
+- [x] **1.1 Write failing interface tests**
 
   Files: `Create: tests/test_join.py`
 
@@ -46,7 +46,7 @@ Interfaces:
   4. Confirm failure because join structures are missing.
   5. Record failure output in the task report.
 
-- [ ] **1.2 Implement minimal join structures**
+- [x] **1.2 Implement minimal join structures**
 
   Files: `Modify: tinydb/sql/ast.py`, `Modify: tinydb/planner.py`
 
@@ -66,7 +66,7 @@ Interfaces:
 - **Consumes**: join AST structures.
 - **Produces**: join-aware `Select` AST from SQL text.
 
-- [ ] **2.1 Write failing parser tests**
+- [x] **2.1 Write failing parser tests**
 
   Files: `Modify: tests/test_join.py`
 
@@ -77,7 +77,7 @@ Interfaces:
   4. Test unsupported `LEFT JOIN` rejection.
   5. Run `python -m pytest tests/test_join.py tests/test_parser.py`.
 
-- [ ] **2.2 Implement parser support**
+- [x] **2.2 Implement parser support**
 
   Files: `Modify: tinydb/sql/parser.py`, `Modify: tinydb/sql/ast.py`
 
@@ -97,7 +97,7 @@ Interfaces:
 - **Consumes**: fake join AST fixtures and catalog metadata.
 - **Produces**: resolved `JoinPlan`.
 
-- [ ] **3.1 Write failing planner tests**
+- [x] **3.1 Write failing planner tests**
 
   Files: `Modify: tests/test_join.py`
 
@@ -108,7 +108,7 @@ Interfaces:
   4. Assert unknown columns fail.
   5. Run planner-focused tests.
 
-- [ ] **3.2 Implement join planning**
+- [x] **3.2 Implement join planning**
 
   Files: `Modify: tinydb/planner.py`
 
@@ -128,7 +128,7 @@ Interfaces:
 - **Consumes**: fake `JoinPlan` fixtures.
 - **Produces**: joined row execution.
 
-- [ ] **4.1 Write failing executor tests**
+- [x] **4.1 Write failing executor tests**
 
   Files: `Modify: tests/test_join.py`
 
@@ -139,7 +139,7 @@ Interfaces:
   4. Assert ordering and pagination after join.
   5. Run `python -m pytest tests/test_join.py`.
 
-- [ ] **4.2 Implement nested-loop join execution**
+- [x] **4.2 Implement nested-loop join execution**
 
   Files: `Modify: tinydb/executor.py`, `Modify: tinydb/sql/expressions.py`
 
@@ -159,7 +159,7 @@ Interfaces:
 - **Consumes**: parser, planner, and executor join behavior.
 - **Produces**: complete public SQL behavior.
 
-- [ ] **5.1 Connect parser, planner, and executor**
+- [x] **5.1 Connect parser, planner, and executor**
 
   Files: `Modify: tinydb/planner.py`, `Modify: tinydb/executor.py`, `Modify: tests/test_join.py`, `Modify: AGENTS.md`
 

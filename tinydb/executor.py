@@ -7,6 +7,7 @@ from tinydb.errors import ConstraintError, ExecutionError, StorageError
 from tinydb.index import BTreeIndex
 from tinydb.planner import (
     IndexScanPlan,
+    JoinPlan,
     Planner,
     QueryPlan,
     TableScanPlan,
@@ -16,6 +17,7 @@ from tinydb.result import Result
 from tinydb.sql.ast import (
     BeginTransaction,
     BinaryExpression,
+    ColumnRef,
     CommitTransaction,
     CreateTable,
     Delete,
@@ -134,6 +136,8 @@ class Executor:
     def _execute_select(self, statement: Select) -> Result:
         catalog = self.storage.read_catalog()
         schema = catalog.get_table(statement.table)
+        if statement.join_sources:
+            return self._execute_join_select(catalog, statement)
         self._validate_select_columns(schema, statement)
         rows = self._matching_rows(catalog, schema, statement.where)
 
@@ -144,6 +148,62 @@ class Executor:
         paged_rows = self._apply_offset_limit(statement, ordered_rows)
         columns, result_rows = self._project_rows(schema, statement.projections, paged_rows)
         return Result(columns=columns, rows=result_rows)
+
+    def _execute_join_select(self, catalog: Catalog, statement: Select) -> Result:
+        planner = Planner(catalog)
+        plan = planner.plan(statement)
+        if not isinstance(plan, JoinPlan):
+            raise ExecutionError(f"expected join plan, got: {plan!r}")
+        statement = planner.bind_join_expressions(statement)
+
+        rows = tuple(
+            row for row in self._join_rows(catalog, plan) if evaluate_predicate(statement.where, row)
+        )
+        ordered_rows = self._apply_ordering(statement, rows)
+        paged_rows = self._apply_offset_limit(statement, ordered_rows)
+        columns = tuple(expression_name(column) for column in plan.output_columns)
+        result_rows = tuple(
+            tuple(evaluate_expression(column, row) for column in plan.output_columns)
+            for row in paged_rows
+        )
+        return Result(columns=columns, rows=result_rows)
+
+    def _join_rows(
+        self,
+        catalog: Catalog,
+        plan: JoinPlan,
+    ) -> tuple[dict[str, object], ...]:
+        joined_rows: tuple[dict[str, object], ...] = ({},)
+        for source in plan.sources:
+            qualifier = source.alias or source.table_name
+            schema = catalog.get_table(source.table_name)
+            source_rows = TableStore(self.storage, schema).scan()
+            candidates: list[dict[str, object]] = []
+            for joined_row in joined_rows:
+                for _, source_row in source_rows:
+                    candidate = dict(joined_row)
+                    candidate.update(
+                        {
+                            f"{qualifier}.{column_name}": value
+                            for column_name, value in source_row.items()
+                        }
+                    )
+                    if self._join_predicates_match(plan, candidate):
+                        candidates.append(candidate)
+            joined_rows = tuple(candidates)
+        return joined_rows
+
+    def _join_predicates_match(self, plan: JoinPlan, row: dict[str, object]) -> bool:
+        for predicate in plan.predicates:
+            if not all(
+                f"{column.qualifier}.{column.column_name}" in row
+                for column in (predicate.left, predicate.right)
+            ):
+                continue
+            expression = BinaryExpression(predicate.left, "=", predicate.right)
+            if not evaluate_predicate(expression, row):
+                return False
+        return True
 
     def _matching_rows(
         self,
@@ -382,11 +442,11 @@ class Executor:
     ) -> tuple[dict[str, object], ...]:
         ordered = list(rows)
         for ordering in reversed(statement.order_by):
-            column_name = ordering.expression.name
-            if not all(column_name in row for row in ordered):
-                raise ConstraintError(f"unknown column: {column_name}")
             ordered.sort(
-                key=lambda row, name=column_name: (row[name] is None, row[name]),
+                key=lambda row, expression=ordering.expression: (
+                    evaluate_expression(expression, row) is None,
+                    evaluate_expression(expression, row),
+                ),
                 reverse=ordering.descending,
             )
         return tuple(ordered)
