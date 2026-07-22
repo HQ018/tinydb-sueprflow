@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from tinydb.errors import ConstraintError, ExecutionError
-from tinydb.sql.ast import BinaryExpression, Expression, FunctionCall, Identifier, Literal
+from tinydb.sql.ast import BinaryExpression, ColumnRef, Expression, FunctionCall, Identifier, Literal
 
 
 def evaluate_expression(expression: Expression, row: dict[str, object]) -> object:
@@ -14,6 +14,12 @@ def evaluate_expression(expression: Expression, row: dict[str, object]) -> objec
             return row[expression.name]
         except KeyError as exc:
             raise ConstraintError(f"unknown column: {expression.name}") from exc
+    if isinstance(expression, ColumnRef):
+        column_name = f"{expression.qualifier}.{expression.column_name}"
+        try:
+            return row[column_name]
+        except KeyError as exc:
+            raise ConstraintError(f"unknown column: {column_name}") from exc
     if isinstance(expression, BinaryExpression):
         return _evaluate_binary(expression, row)
     if isinstance(expression, FunctionCall):
@@ -30,6 +36,8 @@ def evaluate_predicate(expression: Expression | None, row: dict[str, object]) ->
 def expression_name(expression: Expression) -> str:
     if isinstance(expression, Identifier):
         return expression.name
+    if isinstance(expression, ColumnRef):
+        return f"{expression.qualifier}.{expression.column_name}"
     if isinstance(expression, FunctionCall):
         arguments = ", ".join(expression_name(argument) for argument in expression.arguments)
         return f"{expression.name}({arguments})"
