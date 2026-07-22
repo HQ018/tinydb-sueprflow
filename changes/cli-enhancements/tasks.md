@@ -34,7 +34,7 @@ Interfaces:
 - **Consumes**: existing `Database`, `Result`, and public errors.
 - **Produces**: command, rendering, and explain interfaces.
 
-- [ ] **1.1 Write failing interface tests**
+- [x] **1.1 Write failing interface tests**
 
   Files: `Create: tests/test_cli_enhancements.py`
 
@@ -45,7 +45,7 @@ Interfaces:
   4. Run `python -m pytest tests/test_cli_enhancements.py`.
   5. Confirm failure because interfaces are missing.
 
-- [ ] **1.2 Implement interface stubs**
+- [x] **1.2 Implement interface stubs**
 
   Files: `Create: tinydb/cli_commands.py`, `Create: tinydb/cli_rendering.py`, `Create: tinydb/explain.py`
 
@@ -65,7 +65,7 @@ Interfaces:
 - **Consumes**: command registry.
 - **Produces**: `.help`, `.quit`, `.tables`, `.schema`, and unknown command behavior.
 
-- [ ] **2.1 Write failing dot command tests**
+- [x] **2.1 Write failing dot command tests**
 
   Files: `Modify: tests/test_cli_enhancements.py`
 
@@ -76,7 +76,7 @@ Interfaces:
   4. Test `.tables` and `.schema` through fake database metadata.
   5. Run command-focused tests.
 
-- [ ] **2.2 Implement dot command handlers**
+- [x] **2.2 Implement dot command handlers**
 
   Files: `Modify: tinydb/cli_commands.py`
 
@@ -96,7 +96,7 @@ Interfaces:
 - **Consumes**: command registry and existing REPL.
 - **Produces**: statement buffering until semicolon.
 
-- [ ] **3.1 Write failing multiline tests**
+- [x] **3.1 Write failing multiline tests**
 
   Files: `Modify: tests/test_cli_enhancements.py`, `Modify: tests/test_cli.py`
 
@@ -107,7 +107,7 @@ Interfaces:
   4. Assert EOF with partial input reports a concise error.
   5. Run CLI tests.
 
-- [ ] **3.2 Implement multiline buffering**
+- [x] **3.2 Implement multiline buffering**
 
   Files: `Modify: tinydb/cli.py`
 
@@ -127,7 +127,7 @@ Interfaces:
 - **Consumes**: rendering helpers.
 - **Produces**: color and no-color output paths.
 
-- [ ] **4.1 Write failing rendering tests**
+- [x] **4.1 Write failing rendering tests**
 
   Files: `Modify: tests/test_cli_enhancements.py`
 
@@ -138,7 +138,7 @@ Interfaces:
   4. Test non-interactive output defaults to no color.
   5. Run rendering tests.
 
-- [ ] **4.2 Implement rendering helpers**
+- [x] **4.2 Implement rendering helpers**
 
   Files: `Modify: tinydb/cli_rendering.py`, `Modify: tinydb/cli.py`
 
@@ -158,7 +158,7 @@ Interfaces:
 - **Consumes**: plan explanation adapter.
 - **Produces**: `.explain <sql>` output.
 
-- [ ] **5.1 Write failing explain tests**
+- [x] **5.1 Write failing explain tests**
 
   Files: `Modify: tests/test_cli_enhancements.py`
 
@@ -169,7 +169,7 @@ Interfaces:
   4. Assert output is stable text.
   5. Run explain tests.
 
-- [ ] **5.2 Implement explain adapter and command**
+- [x] **5.2 Implement explain adapter and command**
 
   Files: `Modify: tinydb/explain.py`, `Modify: tinydb/cli_commands.py`, `Modify: tinydb/planner.py`
 
@@ -189,7 +189,7 @@ Interfaces:
 - **Consumes**: command, multiline, rendering, and explain behavior.
 - **Produces**: complete enhanced CLI.
 
-- [ ] **6.1 Integrate enhanced REPL**
+- [x] **6.1 Integrate enhanced REPL**
 
   Files: `Modify: tinydb/cli.py`, `Modify: README.md`, `Modify: tests/test_cli.py`, `Modify: tests/test_cli_enhancements.py`
 
