@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from threading import Event, Thread
+
 import pytest
 
 from tinydb.catalog import ColumnSchema, TableSchema
-from tinydb.errors import TransactionError
+from tinydb.errors import ConcurrencyError, TransactionError
 from tinydb.index import BTreeIndex
 from tinydb.storage import RecordPointer, StorageManager, TableStore
 from tinydb.transaction import RecoveryStatus, TransactionManager
@@ -137,18 +139,78 @@ def test_second_storage_open_during_live_transaction_does_not_recover_marker(tmp
         first_storage.close()
 
 
-def test_second_same_process_writer_for_same_path_raises_transaction_error(tmp_path):
+def test_second_same_process_writer_for_same_path_raises_concurrency_error(tmp_path):
     path = tmp_path / "writer.db"
+    first_storage = StorageManager(path)
+    second_storage = StorageManager(path)
+    first_tx = TransactionManager(first_storage, lock_timeout=0)
+    second_tx = TransactionManager(second_storage, lock_timeout=0)
+
+    first_tx.begin()
+    try:
+        with pytest.raises(ConcurrencyError):
+            second_tx.begin()
+    finally:
+        first_tx.rollback()
+        first_storage.close()
+        second_storage.close()
+
+
+def test_same_process_conflict_does_not_wait_for_platform_lock(tmp_path):
+    path = tmp_path / "same-process-conflict.db"
     first_storage = StorageManager(path)
     second_storage = StorageManager(path)
     first_tx = TransactionManager(first_storage)
     second_tx = TransactionManager(second_storage)
+    completed = Event()
+    errors: list[BaseException] = []
+
+    def begin_second_transaction() -> None:
+        try:
+            second_tx.begin()
+        except BaseException as exc:
+            errors.append(exc)
+        finally:
+            completed.set()
+
+    first_tx.begin()
+    worker = Thread(target=begin_second_transaction, daemon=True)
+    worker.start()
+    try:
+        assert completed.wait(0.2), "same-process conflict waited for platform lock"
+        assert len(errors) == 1
+        assert isinstance(errors[0], ConcurrencyError)
+    finally:
+        if first_tx.in_transaction:
+            first_tx.rollback()
+        assert completed.wait(1)
+        if second_tx.in_transaction:
+            second_tx.rollback()
+        worker.join(1)
+        first_storage.close()
+        second_storage.close()
+
+
+@pytest.mark.parametrize("finish", ("commit", "rollback"))
+def test_explicit_transaction_finish_releases_write_lock(tmp_path, finish):
+    path = tmp_path / f"{finish}-releases-lock.db"
+    first_storage = StorageManager(path)
+    second_storage = StorageManager(path)
+    first_tx = TransactionManager(first_storage, lock_timeout=0)
+    second_tx = TransactionManager(second_storage, lock_timeout=0)
 
     first_tx.begin()
     try:
-        with pytest.raises(TransactionError):
+        with pytest.raises(ConcurrencyError):
             second_tx.begin()
+
+        getattr(first_tx, finish)()
+        second_tx.begin()
+        second_tx.rollback()
     finally:
-        first_tx.rollback()
+        if first_tx.in_transaction:
+            first_tx.rollback()
+        if second_tx.in_transaction:
+            second_tx.rollback()
         first_storage.close()
         second_storage.close()

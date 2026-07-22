@@ -1,5 +1,6 @@
 from tinydb.api import Database
 from tinydb.errors import (
+    ConcurrencyError,
     ConstraintError,
     DatabaseError,
     ExecutionError,
@@ -11,6 +12,7 @@ from tinydb.errors import (
 from tinydb.result import Result
 
 __all__ = (
+    "ConcurrencyError",
     "ConstraintError",
     "Database",
     "DatabaseError",
