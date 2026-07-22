@@ -2,41 +2,44 @@
 # Derived data. Always rebuildable from artifacts. Lost/corrupt → fall back to content-level detection.
 
 # === Core state ===
-state: executing
+state: closing
 workflow: full
+revision: 1
 
 # === Hashes (fast staleness detection) ===
 artifacts_hash: sha256:0e750dd6ebc71564d16652f1651553a96965ecad6b8e4be84841a9cf191ec7e9
 contract_hash: sha256:4600011a922dcf25df6e6360d19c573446ea0d8b4758c4a94c80a5d359b64359
 
 # === Execution progress ===
-execution_mode: SDD
+execution_mode: sdd
+execution_plan_hash: sha256:b362cc28de90d106def6cf70bb16a906663d58655f29e67c56efd71c17f06897
+execution_plan_revision: 1
 batches_completed: 5
-test_result: null
-spec_merged: false
+test_result: pass
+spec_merged: true
 
 # === Metadata ===
 change_name: concurrency-control
-last_transition: 2026-07-16T11:16:17.910Z
-last_transition_from: approved-for-build
-last_transition_to: executing
+last_transition: 2026-07-22T02:39:23.008Z
+last_transition_from: executing
+last_transition_to: closing
 
 # === Decision points ===
 dp_0_decisions: >
 dp_0_result: confirmed
 dp_0_confirmed: true
 dp_0_timestamp: 2026-07-16T10:21:14Z
-dp_1_result: null
-dp_1_timestamp: null
+dp_1_result: confirmed: user clarified independent feature changes, parallel-friendly planning, reduced strong dependencies, stable interfaces/stubs/adapters first, and mandatory isolated worktree execution
+dp_1_timestamp: 2026-07-22T02:50:57Z
 dp_2_result: approved: user approved proposal/specs/design/tasks artifacts; proceed to contract-builder with parallel-friendly worktree constraints
 dp_2_timestamp: 2026-07-16T10:48:48Z
 dp_3_result: approved: execution contract accepted by user; build may proceed after DP-4 execution mode selection and mandatory worktree isolation
 dp_3_timestamp: 2026-07-16T10:56:41Z
-dp_4_result: SDD: approved contract requires independently reviewable process lock adapter worktree
-dp_4_timestamp: 2026-07-16T11:16:11Z
-dp_5_result: null
-dp_5_timestamp: null
-dp_6_result: null
-dp_6_timestamp: null
-dp_7_result: null
-dp_7_timestamp: null
+dp_4_result: sdd: plan revision 1; user-confirmed; Backfill approved SDD plan for completed release verification
+dp_4_timestamp: 2026-07-22T02:33:38.858Z
+dp_5_result: not triggered: no debugging escalation was required during build execution
+dp_5_timestamp: 2026-07-22T02:52:45Z
+dp_6_result: pass: final release verification passed after spec-merger; specs merged; change is in closing and ready for DP-7 archive confirmation
+dp_6_timestamp: 2026-07-22T02:45:51Z
+dp_7_result: confirmed: archived concurrency-control with final verification pass, synced concurrency-control spec, complete task state, audit evidence, and ready-for-code-merge status
+dp_7_timestamp: 2026-07-22T02:53:11Z

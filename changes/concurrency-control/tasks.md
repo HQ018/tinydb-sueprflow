@@ -33,7 +33,7 @@ Interfaces:
 - **Consumes**: existing public error hierarchy.
 - **Produces**: public concurrency error and lock facade.
 
-- [ ] **1.1 Write failing lock interface tests**
+- [x] **1.1 Write failing lock interface tests**
 
   Files: `Create: tests/test_concurrency.py`
 
@@ -44,7 +44,7 @@ Interfaces:
   4. Run `python -m pytest tests/test_concurrency.py`.
   5. Confirm failure because lock interfaces are missing.
 
-- [ ] **1.2 Implement lock interface stubs**
+- [x] **1.2 Implement lock interface stubs**
 
   Files: `Create: tinydb/locking.py`, `Modify: tinydb/errors.py`, `Modify: tinydb/__init__.py`
 
@@ -64,7 +64,7 @@ Interfaces:
 - **Consumes**: `LockManager` facade.
 - **Produces**: serialized access for shared `Database` instances.
 
-- [ ] **2.1 Write failing thread tests**
+- [x] **2.1 Write failing thread tests**
 
   Files: `Modify: tests/test_concurrency.py`
 
@@ -75,7 +75,7 @@ Interfaces:
   4. Assert no raw Python race exception escapes.
   5. Run thread-focused tests.
 
-- [ ] **2.2 Implement instance serialization**
+- [x] **2.2 Implement instance serialization**
 
   Files: `Modify: tinydb/api.py`
 
@@ -95,7 +95,7 @@ Interfaces:
 - **Consumes**: `LockAdapter.acquire_exclusive`.
 - **Produces**: platform file lock implementation.
 
-- [ ] **3.1 Write failing subprocess tests**
+- [x] **3.1 Write failing subprocess tests**
 
   Files: `Modify: tests/test_concurrency.py`
 
@@ -106,7 +106,7 @@ Interfaces:
   4. Assert the database file remains readable.
   5. Run subprocess-focused tests.
 
-- [ ] **3.2 Implement platform adapters**
+- [x] **3.2 Implement platform adapters**
 
   Files: `Modify: tinydb/locking.py`
 
@@ -126,7 +126,7 @@ Interfaces:
 - **Consumes**: lock facade and existing transaction manager.
 - **Produces**: write-safe transaction boundaries.
 
-- [ ] **4.1 Write failing transaction conflict tests**
+- [x] **4.1 Write failing transaction conflict tests**
 
   Files: `Modify: tests/test_concurrency.py`, `Modify: tests/test_transactions.py`
 
@@ -137,7 +137,7 @@ Interfaces:
   4. Assert rollback and commit release locks.
   5. Run transaction and concurrency tests.
 
-- [ ] **4.2 Integrate write locks**
+- [x] **4.2 Integrate write locks**
 
   Files: `Modify: tinydb/transaction.py`, `Modify: tinydb/storage/file.py`, `Modify: tinydb/api.py`
 
@@ -157,7 +157,7 @@ Interfaces:
 - **Consumes**: completed lock behavior.
 - **Produces**: documented concurrency guarantees.
 
-- [ ] **5.1 Verify and document concurrency model**
+- [x] **5.1 Verify and document concurrency model**
 
   Files: `Modify: README.md`, `Modify: tests/test_concurrency.py`, `Modify: AGENTS.md`
 
